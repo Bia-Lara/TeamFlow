@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../features/groups/presentation/pages/create_group_page.dart';
 
 class AppBottomNavbar extends StatelessWidget {
   final int currentIndex;
@@ -36,7 +37,7 @@ class AppBottomNavbar extends StatelessWidget {
 
           _buildItem(Icons.check_box_outlined, "Tarefas", 1),
 
-          _buildAddButton(),
+          _buildAddButton(context),
 
           _buildItem(Icons.groups_outlined, "Grupos", 2),
 
@@ -76,26 +77,36 @@ class AppBottomNavbar extends StatelessWidget {
     );
   }
 
-  Widget _buildAddButton() {
+  Widget _buildAddButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const CreateGroupPage(),
+          ),
+        );
+      },
 
-    return Container(
-      height: 60,
-      width: 60,
+      child: Container(
+        height: 60,
+        width: 60,
 
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFF6C63FF),
-            Color(0xFF8F7BFF)
-          ],
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF6C63FF),
+              Color(0xFF8F7BFF)
+            ],
+          ),
         ),
-      ),
 
-      child: const Icon(
-        Icons.add,
-        color: Colors.white,
-        size: 30,
+        child: const Icon(
+          Icons.add,
+          color: Colors.white,
+          size: 30,
+        ),
       ),
     );
   }
