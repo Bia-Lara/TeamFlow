@@ -3,9 +3,51 @@ import '../widgets/header_widget.dart';
 import '../widgets/stat_card_widget.dart';
 import '../widgets/group_card_widget.dart';
 import '../widgets/task_card_widget.dart';
+import '../../../tasks/domain/task.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+
+  List<Task> tasks = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadTasks(); // 🔥 chama ao iniciar
+  }
+
+  Future<void> loadTasks() async {
+    final response = [
+      {
+        "id": "1",
+        "title": "Redesign da landing page",
+        "groupId": "Design",
+        "isCompleted": false
+      },
+      {
+        "id": "2",
+        "title": "Corrigir bug no login",
+        "groupId": "Dev",
+        "isCompleted": true
+      }
+    ];
+
+    setState(() {
+      tasks = response.map((e) => Task.fromJson(e)).toList();
+    });
+  }
+
+  void toggleTask(Task task) {
+    setState(() {
+      task.isCompleted = !task.isCompleted;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,18 +56,14 @@ class HomePage extends StatelessWidget {
       backgroundColor: const Color(0xFF060B1A),
 
       body: SafeArea(
-
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal:20),
 
           child: ListView(
-
             children: [
 
               const SizedBox(height:20),
-
               const HeaderWidget(),
-
               const SizedBox(height:30),
 
               Row(
@@ -34,7 +72,7 @@ class HomePage extends StatelessWidget {
 
                   StatCardWidget(
                     title: "Tarefas",
-                    value: "24",
+                    value: tasks.length.toString(),
                     icon: Icons.check_box_outlined,
                     gradient: const LinearGradient(
                       colors: [Color(0xFF4E3BFF), Color(0xFF2A2C7C)],
@@ -43,7 +81,10 @@ class HomePage extends StatelessWidget {
 
                   StatCardWidget(
                     title: "Pendentes",
-                    value: "8",
+                    value: tasks
+                        .where((t) => !t.isCompleted)
+                        .length
+                        .toString(),
                     icon: Icons.access_time,
                     gradient: const LinearGradient(
                       colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
@@ -133,14 +174,21 @@ class HomePage extends StatelessWidget {
 
               const SizedBox(height:20),
 
-              const TaskCardWidget(
-                title: "Redesign da landing page",
-                group: "Design"
-              ),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: tasks.length,
+                itemBuilder: (context, index) {
 
-              const TaskCardWidget(
-                title: "Corrigir bug no login",
-                group: "Dev"
+                  final task = tasks[index];
+
+                  return TaskCardWidget(
+                    title: task.title ?? "",
+                    group: task.groupId ?? "",
+                    isCompleted: task.isCompleted,
+                    onToggle: () => toggleTask(task),
+                  );
+                },
               ),
             ],
           ),
