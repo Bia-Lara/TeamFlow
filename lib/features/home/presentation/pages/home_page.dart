@@ -27,13 +27,17 @@ class _HomePageState extends State<HomePage> {
       {
         "id": "1",
         "title": "Redesign da landing page",
-        "groupId": "Design",
+        "groupId": "1",
+        "groupName": "Design",
+        "priority": "media",
         "isCompleted": false
       },
       {
         "id": "2",
         "title": "Corrigir bug no login",
-        "groupId": "Dev",
+        "groupId": "2",
+        "groupName": "Dev",
+        "priority": "alta",
         "isCompleted": true
       }
     ];
@@ -184,7 +188,7 @@ class _HomePageState extends State<HomePage> {
 
                   return TaskCardWidget(
                     title: task.title ?? "",
-                    group: task.groupId ?? "",
+                    group: task.groupName ?? "",
                     isCompleted: task.isCompleted,
                     onToggle: () => toggleTask(task),
                   );

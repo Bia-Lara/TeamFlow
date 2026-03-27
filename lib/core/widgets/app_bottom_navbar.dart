@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../features/groups/presentation/pages/create_group_page.dart';
+import '../../features/tasks/presentation/pages/task_form_page.dart';
 
 class AppBottomNavbar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
+  final VoidCallback? onTaskCreated;
 
   const AppBottomNavbar({
     super.key,
     required this.currentIndex,
     required this.onTap,
+    this.onTaskCreated,
   });
 
   @override
@@ -80,12 +83,22 @@ class AppBottomNavbar extends StatelessWidget {
   Widget _buildAddButton(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const CreateGroupPage(),
-          ),
-        );
+        if (currentIndex == 1) {
+          // Na aba de tarefas, abre criação de tarefa
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const TaskFormPage(),
+            ),
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const CreateGroupPage(),
+            ),
+          );
+        }
       },
 
       child: Container(

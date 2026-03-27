@@ -163,6 +163,10 @@ class _AddMembersPageState extends State<AddMembersPage> {
                                 colors: [Color(0xFF8F7BFF), Color(0xFF6C63FF)],
                               ),
                               borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Color(0xFF8F7BFF), // cor da borda
+                                width: 2,            // espessura
+                              ),
                             ),
                             child: const Center(
                               child: Text(
@@ -170,6 +174,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
+                                  
                                 ),
                               ),
                             ),
