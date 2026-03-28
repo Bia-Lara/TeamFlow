@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/task.dart';
-import '../../data/mock_tasks.dart';
+import '../../../../core/data/mock_data.dart';
 import '../widgets/task_list_card.dart';
 import '../widgets/task_section_header.dart';
 import '../widgets/task_filter_chips.dart';
@@ -16,7 +16,7 @@ class TasksPage extends StatefulWidget {
 }
 
 class _TasksPageState extends State<TasksPage> {
-  List<Task> _allTasks = [];
+  final _mock = MockData();
   TaskFilter _filter = TaskFilter.todas;
   TaskFilterOptions _advancedFilter = const TaskFilterOptions();
   String _searchQuery = '';
@@ -34,7 +34,6 @@ class _TasksPageState extends State<TasksPage> {
   @override
   void initState() {
     super.initState();
-    _allTasks = getMockTasks();
   }
 
   @override
@@ -44,7 +43,7 @@ class _TasksPageState extends State<TasksPage> {
   }
 
   List<Task> get _filteredTasks {
-    var tasks = List<Task>.from(_allTasks);
+    var tasks = _mock.getTasksForUser(_mock.currentUser.id!);
 
     // Filtro por status
     switch (_filter) {
@@ -122,7 +121,8 @@ class _TasksPageState extends State<TasksPage> {
   }
 
   void _openFilterSheet() async {
-    final groups = _allTasks
+    final allTasks = _mock.getTasksForUser(_mock.currentUser.id!);
+    final groups = allTasks
         .map((t) => t.groupName)
         .where((g) => g != null)
         .cast<String>()
@@ -152,12 +152,12 @@ class _TasksPageState extends State<TasksPage> {
     );
     if (result == null) return;
     if (result is String && result == 'delete') {
-      setState(() => _allTasks.removeWhere((t) => t.id == task.id));
+      setState(() => _mock.tasks.removeWhere((t) => t.id == task.id));
     } else if (result is Task) {
       setState(() {
-        final index = _allTasks.indexWhere((t) => t.id == result.id);
+        final index = _mock.tasks.indexWhere((t) => t.id == result.id);
         if (index != -1) {
-          _allTasks[index] = result;
+          _mock.tasks[index] = result;
         }
       });
     }
