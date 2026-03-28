@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../data/user.entity.dart';
-import '../../data/mock_user.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/profile_stats_card.dart';
 import '../widgets/profile_menu_item.dart';
 import 'edit_profile_page.dart';
+import '../../../../core/data/mock_data.dart';
+import '../../../auth/presentation/pages/login_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -14,18 +15,14 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  late User _user;
+  final _mock = MockData();
 
-  // Mock stats — prontos para vir do backend
-  final int _totalTasks = 24;
-  final int _completedTasks = 21;
+  User get _user => _mock.currentUser;
 
-  @override
-  void initState() {
-    super.initState();
-    _user = getMockUser();
-  }
-
+  int get _totalTasks => _mock.getTasksForUser(_user.id!).length;
+  int get _completedTasks =>
+      _mock.getTasksForUser(_user.id!).where((t) => t.isCompleted).length;
+  int get _groupCount => _mock.getGroupsForUser(_user.id!).length;
   int get _completedPercent =>
       _totalTasks > 0 ? ((_completedTasks / _totalTasks) * 100).round() : 0;
 
@@ -37,7 +34,12 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
     if (result != null) {
-      setState(() => _user = result);
+      setState(() {
+        _mock.currentUser = result;
+        // Atualiza também na lista de users
+        final idx = _mock.allUsers.indexWhere((u) => u.id == result.id);
+        if (idx != -1) _mock.allUsers[idx] = result;
+      });
     }
   }
 
@@ -65,12 +67,11 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // TODO: integrar com backend — limpar sessão
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Logout realizado'),
-                  backgroundColor: Color(0xFF6C63FF),
-                ),
+              // TODO: integrar com backend — limpar sessão/token
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+                (route) => false,
               );
             },
             child: const Text(
@@ -85,8 +86,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final groupCount = _user.groupIds?.length ?? 0;
-
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
       body: SafeArea(
@@ -196,7 +195,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   ),
                                   const SizedBox(width: 10),
                                   Text(
-                                    '$groupCount grupos',
+                                    '$_groupCount grupos',
                                     style: const TextStyle(
                                       color: Colors.white54,
                                       fontSize: 13,
@@ -212,7 +211,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 20),
                     ProfileStatsCard(
                       totalTasks: _totalTasks,
-                      totalGroups: groupCount,
+                      totalGroups: _groupCount,
                       completedPercent: _completedPercent,
                     ),
                   ],
@@ -236,7 +235,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: 'Aparência',
                 subtitle: 'Tema e preferências visuais',
                 onTap: () {
-                  // TODO: implementar tela de aparência
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Em breve'),
