@@ -4,6 +4,9 @@ import '../widgets/stat_card_widget.dart';
 import '../widgets/group_card_widget.dart';
 import '../widgets/task_card_widget.dart';
 import '../../../tasks/domain/task.dart';
+import '../../../groups/data/group.entity.dart';
+import '../../../../core/data/mock_data.dart';
+import '../../../../core/notifications/tab_change_notification.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,67 +16,58 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final _mock = MockData();
 
-  List<Task> tasks = [];
+  List<Task> get _tasks => _mock.getTasksForUser(_mock.currentUser.id!);
+  List<Group> get _groups => _mock.getGroupsForUser(_mock.currentUser.id!);
 
-  @override
-  void initState() {
-    super.initState();
-    loadTasks(); // 🔥 chama ao iniciar
-  }
-
-  Future<void> loadTasks() async {
-    final response = [
-      {
-        "id": "1",
-        "title": "Redesign da landing page",
-        "groupId": "1",
-        "groupName": "Design",
-        "priority": "media",
-        "isCompleted": false
-      },
-      {
-        "id": "2",
-        "title": "Corrigir bug no login",
-        "groupId": "2",
-        "groupName": "Dev",
-        "priority": "alta",
-        "isCompleted": true
-      }
-    ];
-
-    setState(() {
-      tasks = response.map((e) => Task.fromJson(e)).toList();
-    });
-  }
-
-  void toggleTask(Task task) {
+  void _toggleTask(Task task) {
     setState(() {
       task.isCompleted = !task.isCompleted;
     });
   }
 
+  void _goToTab(int index) {
+    TabChangeNotification(index).dispatch(context);
+  }
+
+  static const _groupGradients = [
+    LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF3B3B98)]),
+    LinearGradient(colors: [Color(0xFF00C6FF), Color(0xFF00A8A8)]),
+    LinearGradient(colors: [Color(0xFFFFB75E), Color(0xFFED8F03)]),
+    LinearGradient(colors: [Color(0xFF00D6A1), Color(0xFF00A878)]),
+    LinearGradient(colors: [Color(0xFFFF6B6B), Color(0xFFEE5A24)]),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final tasks = _tasks;
+    final groups = _groups;
+    final pendingCount = tasks.where((t) => !t.isCompleted).length;
+    // Mostra só as 5 tarefas mais recentes (pendentes primeiro)
+    final recentTasks = List<Task>.from(tasks)
+      ..sort((a, b) {
+        if (a.isCompleted != b.isCompleted) {
+          return a.isCompleted ? 1 : -1;
+        }
+        return (b.dueDate ?? DateTime(2000)).compareTo(a.dueDate ?? DateTime(2000));
+      });
+    final displayTasks = recentTasks.take(5).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
-
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal:20),
-
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: ListView(
             children: [
-
-              const SizedBox(height:20),
+              const SizedBox(height: 20),
               const HeaderWidget(),
-              const SizedBox(height:30),
+              const SizedBox(height: 30),
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-
                   StatCardWidget(
                     title: "Tarefas",
                     value: tasks.length.toString(),
@@ -82,13 +76,9 @@ class _HomePageState extends State<HomePage> {
                       colors: [Color(0xFF4E3BFF), Color(0xFF2A2C7C)],
                     ),
                   ),
-
                   StatCardWidget(
                     title: "Pendentes",
-                    value: tasks
-                        .where((t) => !t.isCompleted)
-                        .length
-                        .toString(),
+                    value: pendingCount.toString(),
                     icon: Icons.access_time,
                     gradient: const LinearGradient(
                       colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
@@ -97,103 +87,90 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
 
-              const SizedBox(height:30),
+              const SizedBox(height: 30),
 
-              const Row(
+              Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-
-                  Text(
+                  const Text(
                     "Meus Grupos",
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize:18,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
-                  Text(
-                    "Ver todos",
-                    style: TextStyle(color: Colors.purple),
-                  )
+                  GestureDetector(
+                    onTap: () => _goToTab(2),
+                    child: const Text(
+                      "Ver todos",
+                      style: TextStyle(color: Color(0xFF6C63FF)),
+                    ),
+                  ),
                 ],
               ),
 
-              const SizedBox(height:20),
+              const SizedBox(height: 20),
 
               SizedBox(
-                height:130,
-                child: ListView(
+                height: 130,
+                child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  children: const [
-
-                    GroupCardWidget(
-                      title: "Design",
-                      members: "5 membros",
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF6C63FF), Color(0xFF3B3B98)],
-                      ),
-                    ),
-
-                    GroupCardWidget(
-                      title: "Dev",
-                      members: "8 membros",
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF00C6FF), Color(0xFF00A8A8)],
-                      ),
-                    ),
-
-                    GroupCardWidget(
-                      title: "Marketing",
-                      members: "3 membros",
-                      gradient: LinearGradient(
-                        colors: [Color(0xFFFFB75E), Color(0xFFED8F03)],
-                      ),
-                    ),
-                  ],
+                  itemCount: groups.length,
+                  itemBuilder: (context, index) {
+                    final group = groups[index];
+                    final memberCount = group.memberIds?.length ?? 0;
+                    final gradient = _groupGradients[index % _groupGradients.length];
+                    return GroupCardWidget(
+                      title: group.name ?? '',
+                      members: '$memberCount membros',
+                      gradient: gradient,
+                    );
+                  },
                 ),
               ),
 
-              const SizedBox(height:30),
+              const SizedBox(height: 30),
 
-              const Row(
+              Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-
-                  Text(
+                  const Text(
                     "Tarefas Recentes",
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize:18,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
-                  Text(
-                    "Ver todas",
-                    style: TextStyle(color: Colors.purple),
-                  )
+                  GestureDetector(
+                    onTap: () => _goToTab(1),
+                    child: const Text(
+                      "Ver todas",
+                      style: TextStyle(color: Color(0xFF6C63FF)),
+                    ),
+                  ),
                 ],
               ),
 
-              const SizedBox(height:20),
+              const SizedBox(height: 20),
 
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: tasks.length,
+                itemCount: displayTasks.length,
                 itemBuilder: (context, index) {
-
-                  final task = tasks[index];
-
+                  final task = displayTasks[index];
                   return TaskCardWidget(
                     title: task.title ?? "",
                     group: task.groupName ?? "",
                     isCompleted: task.isCompleted,
-                    onToggle: () => toggleTask(task),
+                    onToggle: () => _toggleTask(task),
                   );
                 },
               ),
+
+              const SizedBox(height: 20),
             ],
           ),
         ),
