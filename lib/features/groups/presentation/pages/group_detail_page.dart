@@ -24,9 +24,24 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   List<Task> get _groupTasks => _mock.getTasksForGroup(widget.group.id!);
 
   void _removeMember(User user) {
+    final isSelf = user.id == _mock.currentUser.id;
+
     setState(() {
       _mock.removeMemberFromGroup(widget.group.id!, user.id!);
     });
+
+    if (isSelf) {
+      // Saiu do grupo — volta para a listagem
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Você saiu do grupo'),
+          backgroundColor: Color(0xFF6C63FF),
+        ),
+      );
+      Navigator.pop(context);
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${user.name} removido do grupo'),

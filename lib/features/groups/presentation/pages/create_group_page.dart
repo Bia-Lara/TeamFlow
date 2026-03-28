@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/group.entity.dart';
+import '../../../../core/data/mock_data.dart';
 
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({super.key});
@@ -9,21 +10,47 @@ class CreateGroupPage extends StatefulWidget {
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
+  final _mock = MockData();
+  final _nameController = TextEditingController();
+  final _descController = TextEditingController();
 
-  final nameController = TextEditingController();
-  final descController = TextEditingController();
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
 
-  void createGroup() {
+  void _createGroup() {
+    final name = _nameController.text.trim();
+    final desc = _descController.text.trim();
 
-    final name = nameController.text.trim();
-    final desc = descController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Digite o nome do grupo'),
+          backgroundColor: Color(0xFFFF4757),
+        ),
+      );
+      return;
+    }
 
-    if (name.isEmpty) return;
-
+    // TODO: integrar com backend — POST /groups
+    final newId = DateTime.now().millisecondsSinceEpoch.toString();
     final group = Group(
+      id: newId,
       name: name,
       description: desc,
-      memberIds: [],
+      memberIds: [_mock.currentUser.id!],
+    );
+
+    _mock.groups.add(group);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Grupo "$name" criado'),
+        backgroundColor: const Color(0xFF6C63FF),
+      ),
     );
 
     Navigator.pop(context, group);
@@ -31,18 +58,14 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
-
       body: Column(
         children: [
-
-          // 🔥 HEADER PADRÃO
+          // Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
-
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [Color(0xFF6C63FF), Color(0xFF3B3B98)],
@@ -53,11 +76,9 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                 bottom: Radius.circular(30),
               ),
             ),
-
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 Row(
                   children: [
                     IconButton(
@@ -66,9 +87,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 20),
-
                 const Text(
                   "Criar novo grupo",
                   style: TextStyle(
@@ -77,9 +96,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-
                 const SizedBox(height: 6),
-
                 const Text(
                   "Organize sua equipe e tarefas",
                   style: TextStyle(color: Colors.white70),
@@ -90,65 +107,53 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
           const SizedBox(height: 30),
 
-          // 👇 FORM
+          // Form
           Padding(
             padding: const EdgeInsets.all(20),
-
             child: Column(
               children: [
-
-                // 🧾 NOME
                 Container(
                   decoration: BoxDecoration(
                     color: const Color(0xFF0F1733),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: TextField(
-                    controller: nameController,
+                    controller: _nameController,
                     style: const TextStyle(color: Colors.white),
-
                     decoration: const InputDecoration(
                       hintText: "Nome do grupo",
-                      hintStyle: TextStyle(color: Colors.white54),
-                      prefixIcon: Icon(Icons.group, color: Colors.white54),
+                      hintStyle: TextStyle(color: Colors.white38),
+                      prefixIcon: Icon(Icons.group, color: Colors.white38),
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.all(16),
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 16),
-
-                // 📝 DESCRIÇÃO
                 Container(
                   decoration: BoxDecoration(
                     color: const Color(0xFF0F1733),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: TextField(
-                    controller: descController,
+                    controller: _descController,
                     style: const TextStyle(color: Colors.white),
                     maxLines: 3,
-
                     decoration: const InputDecoration(
                       hintText: "Descrição (opcional)",
-                      hintStyle: TextStyle(color: Colors.white54),
-                      prefixIcon: Icon(Icons.description, color: Colors.white54),
+                      hintStyle: TextStyle(color: Colors.white38),
+                      prefixIcon: Icon(Icons.description, color: Colors.white38),
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.all(16),
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 30),
-
-                // 🚀 BOTÃO
                 SizedBox(
                   width: double.infinity,
                   child: InkWell(
-                    onTap: createGroup,
+                    onTap: _createGroup,
                     borderRadius: BorderRadius.circular(16),
-
                     child: Ink(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
@@ -168,10 +173,10 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                       ),
                     ),
                   ),
-                )
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );

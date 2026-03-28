@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/task.dart';
+import '../../../../core/data/mock_data.dart';
 
 class TaskFormPage extends StatefulWidget {
   final Task? task;
@@ -11,30 +12,39 @@ class TaskFormPage extends StatefulWidget {
 }
 
 class _TaskFormPageState extends State<TaskFormPage> {
+  final _mock = MockData();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   TaskPriority _priority = TaskPriority.media;
   DateTime _dueDate = DateTime.now();
   TimeOfDay _dueTime = TimeOfDay.now();
-  String _selectedGroup = 'Geral';
-
-  final List<String> _groups = ['Design', 'Dev', 'Geral', 'Marketing'];
+  late String _selectedGroupId;
+  late List<_GroupOption> _groupOptions;
 
   bool get _isEditing => widget.task != null;
 
   @override
   void initState() {
     super.initState();
+
+    // Monta lista de grupos do usuário
+    final userGroups = _mock.getGroupsForUser(_mock.currentUser.id!);
+    _groupOptions = userGroups
+        .map((g) => _GroupOption(id: g.id!, name: g.name ?? ''))
+        .toList();
+
     if (_isEditing) {
       final t = widget.task!;
       _titleController.text = t.title ?? '';
       _descController.text = t.description ?? '';
       _priority = t.priority;
-      _selectedGroup = t.groupName ?? 'Geral';
+      _selectedGroupId = t.groupId ?? _groupOptions.first.id;
       if (t.dueDate != null) {
         _dueDate = t.dueDate!;
         _dueTime = TimeOfDay.fromDateTime(t.dueDate!);
       }
+    } else {
+      _selectedGroupId = _groupOptions.isNotEmpty ? _groupOptions.first.id : '';
     }
   }
 
@@ -45,9 +55,25 @@ class _TaskFormPageState extends State<TaskFormPage> {
     super.dispose();
   }
 
+  String get _selectedGroupName {
+    try {
+      return _groupOptions.firstWhere((g) => g.id == _selectedGroupId).name;
+    } catch (_) {
+      return '';
+    }
+  }
+
   void _save() {
     final title = _titleController.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Digite o título da tarefa'),
+          backgroundColor: Color(0xFFFF4757),
+        ),
+      );
+      return;
+    }
 
     final dueDateTime = DateTime(
       _dueDate.year,
@@ -58,16 +84,27 @@ class _TaskFormPageState extends State<TaskFormPage> {
     );
 
     final task = Task(
-      id: _isEditing ? widget.task!.id : DateTime.now().millisecondsSinceEpoch.toString(),
-      userId: _isEditing ? widget.task!.userId : '1',
+      id: _isEditing
+          ? widget.task!.id
+          : DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: _mock.currentUser.id,
       title: title,
       description: _descController.text.trim(),
-      groupId: _isEditing ? widget.task!.groupId : null,
-      groupName: _selectedGroup,
+      groupId: _selectedGroupId,
+      groupName: _selectedGroupName,
       dueDate: dueDateTime,
       priority: _priority,
       isCompleted: _isEditing ? widget.task!.isCompleted : false,
     );
+
+    if (_isEditing) {
+      // TODO: integrar com backend — PUT /tasks/:id
+      final index = _mock.tasks.indexWhere((t) => t.id == task.id);
+      if (index != -1) _mock.tasks[index] = task;
+    } else {
+      // TODO: integrar com backend — POST /tasks
+      _mock.tasks.add(task);
+    }
 
     Navigator.pop(context, task);
   }
@@ -90,9 +127,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
         );
       },
     );
-    if (picked != null) {
-      setState(() => _dueDate = picked);
-    }
+    if (picked != null) setState(() => _dueDate = picked);
   }
 
   Future<void> _pickTime() async {
@@ -111,9 +146,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
         );
       },
     );
-    if (picked != null) {
-      setState(() => _dueTime = picked);
-    }
+    if (picked != null) setState(() => _dueTime = picked);
   }
 
   void _confirmDelete() {
@@ -122,14 +155,8 @@ class _TaskFormPageState extends State<TaskFormPage> {
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF0F1733),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Excluir tarefa',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Tem certeza que deseja excluir esta tarefa?',
-          style: TextStyle(color: Colors.white70),
-        ),
+        title: const Text('Excluir tarefa', style: TextStyle(color: Colors.white)),
+        content: const Text('Tem certeza que deseja excluir esta tarefa?', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -137,13 +164,12 @@ class _TaskFormPageState extends State<TaskFormPage> {
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // fecha dialog
-              Navigator.pop(context, 'delete'); // volta com sinal de delete
+              // TODO: integrar com backend — DELETE /tasks/:id
+              _mock.tasks.removeWhere((t) => t.id == widget.task!.id);
+              Navigator.pop(context);
+              Navigator.pop(context, 'delete');
             },
-            child: const Text(
-              'Excluir',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: const Text('Excluir', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -235,6 +261,20 @@ class _TaskFormPageState extends State<TaskFormPage> {
   }
 
   Widget _buildGroupSelector() {
+    if (_groupOptions.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F1733),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'Nenhum grupo disponível',
+          style: TextStyle(color: Colors.white38),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
@@ -243,25 +283,25 @@ class _TaskFormPageState extends State<TaskFormPage> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: _selectedGroup,
+          value: _selectedGroupId,
           isExpanded: true,
           dropdownColor: const Color(0xFF0F1733),
           icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white38),
           style: const TextStyle(color: Colors.white),
-          items: _groups.map((g) {
+          items: _groupOptions.map((g) {
             return DropdownMenuItem(
-              value: g,
+              value: g.id,
               child: Row(
                 children: [
                   const Icon(Icons.group, color: Colors.white38, size: 20),
                   const SizedBox(width: 12),
-                  Text(g),
+                  Text(g.name),
                 ],
               ),
             );
           }).toList(),
           onChanged: (value) {
-            if (value != null) setState(() => _selectedGroup = value);
+            if (value != null) setState(() => _selectedGroupId = value);
           },
         ),
       ),
@@ -345,36 +385,15 @@ class _TaskFormPageState extends State<TaskFormPage> {
                     maxLines: 3,
                   ),
                   const SizedBox(height: 20),
-
-                  const Text(
-                    'Prioridade',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
+                  const Text('Prioridade', style: TextStyle(color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 10),
                   _buildPrioritySelector(),
-
                   const SizedBox(height: 20),
-                  const Text(
-                    'Grupo',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
+                  const Text('Grupo', style: TextStyle(color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 10),
                   _buildGroupSelector(),
-
                   const SizedBox(height: 20),
-                  const Text(
-                    'Data e hora',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
+                  const Text('Data e hora', style: TextStyle(color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -389,13 +408,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.calendar_today,
-                                    color: Colors.white38, size: 20),
+                                const Icon(Icons.calendar_today, color: Colors.white38, size: 20),
                                 const SizedBox(width: 10),
-                                Text(
-                                  _formatDate(_dueDate),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                                Text(_formatDate(_dueDate), style: const TextStyle(color: Colors.white)),
                               ],
                             ),
                           ),
@@ -413,13 +428,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.access_time,
-                                    color: Colors.white38, size: 20),
+                                const Icon(Icons.access_time, color: Colors.white38, size: 20),
                                 const SizedBox(width: 10),
-                                Text(
-                                  _formatTime(_dueTime),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                                Text(_formatTime(_dueTime), style: const TextStyle(color: Colors.white)),
                               ],
                             ),
                           ),
@@ -427,10 +438,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 30),
-
-                  // Save button
                   SizedBox(
                     width: double.infinity,
                     child: InkWell(
@@ -465,4 +473,10 @@ class _TaskFormPageState extends State<TaskFormPage> {
       ),
     );
   }
+}
+
+class _GroupOption {
+  final String id;
+  final String name;
+  const _GroupOption({required this.id, required this.name});
 }

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../widgets/header_widget.dart';
 import '../widgets/stat_card_widget.dart';
 import '../widgets/group_card_widget.dart';
-import '../widgets/task_card_widget.dart';
 import '../../../tasks/domain/task.dart';
+import '../../../tasks/presentation/widgets/task_list_card.dart';
 import '../../../groups/data/group.entity.dart';
 import '../../../../core/data/mock_data.dart';
 import '../../../../core/notifications/tab_change_notification.dart';
@@ -161,10 +161,8 @@ class _HomePageState extends State<HomePage> {
                 itemCount: displayTasks.length,
                 itemBuilder: (context, index) {
                   final task = displayTasks[index];
-                  return TaskCardWidget(
-                    title: task.title ?? "",
-                    group: task.groupName ?? "",
-                    isCompleted: task.isCompleted,
+                  return TaskListCard(
+                    task: task,
                     onToggle: () => _toggleTask(task),
                   );
                 },
