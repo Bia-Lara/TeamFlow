@@ -6,7 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../features/profile/data/user.entity.dart';
-import '../security/password_hash.dart';
+import '../security/password_hash.dart' as pw_hash;
 
 class SqliteBackend {
   SqliteBackend._internal();
@@ -33,7 +33,7 @@ class SqliteBackend {
         : openDatabase;
 
     return await (factory is DatabaseFactory
-        ? (factory as DatabaseFactory).openDatabase(
+        ? (factory).openDatabase(
             dbPath,
             options: OpenDatabaseOptions(
               version: 1,
@@ -85,7 +85,7 @@ class SqliteBackend {
 
     // Hash password with salt before storing
     final pw = user.password ?? '';
-    final hashed = generateSaltedHash(pw);
+    final hashed = pw_hash.generateSaltedHash(pw);
     final pwStore =
         jsonEncode({'salt': hashed['salt'], 'hash': hashed['hash']});
 
@@ -119,7 +119,7 @@ class SqliteBackend {
       email: row['email'] as String?,
       password: null,
       groupIds: (row['groupIds'] as String?) != null &&
-              (row['groupIds'] as String)!.isNotEmpty
+              (row['groupIds'] as String).isNotEmpty
           ? List<String>.from(jsonDecode(row['groupIds'] as String))
           : [],
     );
@@ -136,10 +136,158 @@ class SqliteBackend {
               email: row['email'] as String?,
               password: null,
               groupIds: (row['groupIds'] as String?) != null &&
-                      (row['groupIds'] as String)!.isNotEmpty
+                      (row['groupIds'] as String).isNotEmpty
                   ? List<String>.from(jsonDecode(row['groupIds'] as String))
                   : [],
             ))
         .toList();
+  }
+
+  Future<User?> getById(String id) async {
+    final db = await _database;
+    final res = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (res.isEmpty) return null;
+
+    final row = res.first;
+    return User(
+      id: row['id'] as String?,
+      name: row['name'] as String?,
+      email: row['email'] as String?,
+      password: null,
+      groupIds: (row['groupIds'] as String?) != null &&
+              (row['groupIds'] as String).isNotEmpty
+          ? List<String>.from(jsonDecode(row['groupIds'] as String))
+          : [],
+    );
+  }
+
+  Future<User> updateUser(User user) async {
+    final db = await _database;
+
+    if (user.id == null || user.id!.isEmpty) {
+      throw Exception('ID do usuário é obrigatório');
+    }
+
+    final exists = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
+
+    if (exists.isEmpty) throw Exception('Usuário não encontrado');
+
+    // Check if new email is not already taken (if email was changed)
+    if (user.email != null && user.email!.isNotEmpty) {
+      final emailExists = await db.query(
+        'users',
+        where: 'LOWER(email) = ? AND id != ?',
+        whereArgs: [user.email!.toLowerCase(), user.id],
+      );
+
+      if (emailExists.isNotEmpty) throw Exception('E-mail já cadastrado');
+    }
+
+    final map = {
+      'name': user.name,
+      'email': user.email,
+      'groupIds': jsonEncode(user.groupIds ?? []),
+      // Note: password is NOT updated here, use separate method for that
+    };
+
+    await db.update(
+      'users',
+      map,
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
+
+    return user;
+  }
+
+  Future<void> deleteUser(String userId) async {
+    final db = await _database;
+
+    final exists = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+
+    if (exists.isEmpty) throw Exception('Usuário não encontrado');
+
+    await db.delete(
+      'users',
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<bool> verifyPassword(String userId, String password) async {
+    final db = await _database;
+
+    final res = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [userId],
+      columns: ['password'],
+    );
+
+    if (res.isEmpty) throw Exception('Usuário não encontrado');
+
+    final pwStore = res.first['password'] as String?;
+    if (pwStore == null || pwStore.isEmpty) return false;
+
+    final stored = jsonDecode(pwStore) as Map<String, dynamic>;
+    return pw_hash.verifyPassword(
+        password, stored['salt'] as String, stored['hash'] as String);
+  }
+
+  Future<User> login(String email, String password) async {
+    final db = await _database;
+
+    // Find user by email (case-insensitive)
+    final res = await db.query(
+      'users',
+      where: 'LOWER(email) = ?',
+      whereArgs: [email.toLowerCase()],
+    );
+
+    if (res.isEmpty) throw Exception('E-mail ou senha incorretos');
+
+    final row = res.first;
+    final userId = row['id'] as String?;
+    final pwStore = row['password'] as String?;
+
+    if (userId == null) throw Exception('Erro ao autenticar usuário');
+    if (pwStore == null || pwStore.isEmpty) {
+      throw Exception('E-mail ou senha incorretos');
+    }
+
+    // Verify password
+    final stored = jsonDecode(pwStore) as Map<String, dynamic>;
+    final isPasswordValid = pw_hash.verifyPassword(
+      password,
+      stored['salt'] as String,
+      stored['hash'] as String,
+    );
+
+    if (!isPasswordValid) throw Exception('E-mail ou senha incorretos');
+
+    // Return user without password
+    return User(
+      id: row['id'] as String?,
+      name: row['name'] as String?,
+      email: row['email'] as String?,
+      password: null,
+      groupIds: (row['groupIds'] as String?) != null &&
+              (row['groupIds'] as String).isNotEmpty
+          ? List<String>.from(jsonDecode(row['groupIds'] as String))
+          : [],
+    );
   }
 }

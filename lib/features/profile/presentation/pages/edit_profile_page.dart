@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/user.entity.dart';
+import '../../../auth/data/auth_service.dart';
 import '../widgets/profile_avatar.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -18,10 +19,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _confirmPasswordController;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+  bool _isLoading = false;
+
+  late AuthService _authService;
 
   @override
   void initState() {
     super.initState();
+    _authService = AuthService();
     _nameController = TextEditingController(text: widget.user.name ?? '');
     _emailController = TextEditingController(text: widget.user.email ?? '');
     _passwordController = TextEditingController();
@@ -37,7 +42,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -58,21 +63,39 @@ class _EditProfilePageState extends State<EditProfilePage> {
       return;
     }
 
-    final updatedUser = widget.user.copyWith(
-      name: name,
-      email: email,
-      password: password.isNotEmpty ? password : widget.user.password,
-    );
+    setState(() => _isLoading = true);
 
-    // TODO: integrar com backend — PUT /users/:id
-    Navigator.pop(context, updatedUser);
+    try {
+      final updatedUser = widget.user.copyWith(
+        name: name,
+        email: email,
+        // Note: password update requires separate endpoint in future
+      );
+
+      await _authService.updateUser(updatedUser);
+
+      if (mounted) {
+        _showSnackBar('Perfil atualizado com sucesso!', isSuccess: true);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          Navigator.pop(context, updatedUser);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Erro ao atualizar perfil: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String message, {bool isSuccess = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFFFF4757),
+        backgroundColor: isSuccess ? Colors.green : const Color(0xFFFF4757),
       ),
     );
   }
@@ -99,10 +122,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
             child: const Text('Cancelar'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context); // fecha dialog
-              // TODO: integrar com backend — DELETE /users/:id
-              Navigator.pop(context, 'deleted');
+              await _deleteAccount();
             },
             child: const Text(
               'Excluir conta',
@@ -112,6 +134,34 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteAccount() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final userId = widget.user.id;
+      if (userId == null || userId.isEmpty) {
+        throw Exception('ID do usuário não encontrado');
+      }
+
+      await _authService.deleteUser(userId);
+
+      if (mounted) {
+        _showSnackBar('Conta excluída com sucesso', isSuccess: true);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          Navigator.pop(context, 'deleted');
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Erro ao excluir conta: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Widget _buildField({
@@ -148,9 +198,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   ? IconButton(
                       onPressed: onToggleObscure,
                       icon: Icon(
-                        isObscured
-                            ? Icons.visibility_off
-                            : Icons.visibility,
+                        isObscured ? Icons.visibility_off : Icons.visibility,
                         color: Colors.white38,
                       ),
                     )
@@ -200,7 +248,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   ),
                 ),
                 GestureDetector(
-                  onTap: _save,
+                  onTap: _isLoading ? null : _save,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -210,14 +258,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       color: const Color(0xFF8F7BFF),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Text(
-                      'Salvar',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Text(
+                            'Salvar',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                   ),
                 ),
               ],

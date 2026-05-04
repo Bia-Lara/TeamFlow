@@ -75,6 +75,8 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       final created = await authService.register(newUser);
 
+      // Store the created user's ID if needed (for session/persistence)
+
       if (!mounted) return;
 
       _showSnackBar('Conta criada com sucesso', isError: false);
@@ -218,8 +220,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       icon: Icons.lock_outline,
                       isObscured: _obscurePassword,
                       onToggleObscure: () {
-                        setState(
-                            () => _obscurePassword = !_obscurePassword);
+                        setState(() => _obscurePassword = !_obscurePassword);
                       },
                     ),
 
@@ -232,8 +233,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       icon: Icons.lock_outline,
                       isObscured: _obscureConfirm,
                       onToggleObscure: () {
-                        setState(
-                            () => _obscureConfirm = !_obscureConfirm);
+                        setState(() => _obscureConfirm = !_obscureConfirm);
                       },
                     ),
 
