@@ -3,6 +3,7 @@ import '../widgets/auth_field.dart';
 import '../widgets/auth_button.dart';
 import '../../../../core/layout/main_page.dart';
 import '../../../profile/data/user.entity.dart';
+import '../../data/auth_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -62,11 +63,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
     setState(() => _isLoading = true);
 
-    // TODO: integrar com backend — POST /auth/register
-    // Simulando delay de rede
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Mock: cria o objeto User (pronto para enviar ao backend)
     final newUser = User(
       name: name,
       email: email,
@@ -74,21 +70,29 @@ class _RegisterPageState extends State<RegisterPage> {
       groupIds: [],
     );
 
-    // Log para debug — remover quando integrar com backend
-    debugPrint('Usuário criado: ${newUser.toJson()}');
+    final authService = AuthService();
 
-    if (!mounted) return;
+    try {
+      final created = await authService.register(newUser);
 
-    _showSnackBar('Conta criada com sucesso', isError: false);
+      if (!mounted) return;
 
-    await Future.delayed(const Duration(milliseconds: 500));
+      _showSnackBar('Conta criada com sucesso', isError: false);
 
-    if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 500));
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const MainPage()),
-    );
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainPage()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
