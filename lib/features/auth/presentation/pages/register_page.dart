@@ -4,6 +4,7 @@ import '../widgets/auth_button.dart';
 import '../../../../core/layout/main_page.dart';
 import '../../../profile/data/user.entity.dart';
 import '../../data/auth_service.dart';
+import '../../data/user_session.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -75,7 +76,8 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       final created = await authService.register(newUser);
 
-      // Store the created user's ID if needed (for session/persistence)
+      // Store the created user's ID in session
+      UserSession().setCurrentUser(created);
 
       if (!mounted) return;
 

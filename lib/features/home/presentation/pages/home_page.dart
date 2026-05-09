@@ -7,6 +7,7 @@ import '../../../tasks/presentation/widgets/task_list_card.dart';
 import '../../../groups/data/group.entity.dart';
 import '../../../../core/data/mock_data.dart';
 import '../../../../core/notifications/tab_change_notification.dart';
+import '../../../auth/data/user_session.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,8 +19,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _mock = MockData();
 
-  List<Task> get _tasks => _mock.getTasksForUser(_mock.currentUser.id!);
-  List<Group> get _groups => _mock.getGroupsForUser(_mock.currentUser.id!);
+  String? get _userId {
+    final sessionUser = UserSession().currentUser;
+    return sessionUser?.id ?? _mock.currentUser.id;
+  }
+
+  List<Task> get _tasks => _mock.getTasksForUser(_userId!);
+  List<Group> get _groups => _mock.getGroupsForUser(_userId!);
 
   void _toggleTask(Task task) {
     setState(() {
@@ -41,138 +47,142 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final tasks = _tasks;
-    final groups = _groups;
-    final pendingCount = tasks.where((t) => !t.isCompleted).length;
-    // Mostra só as 5 tarefas mais recentes (pendentes primeiro)
-    final recentTasks = List<Task>.from(tasks)
-      ..sort((a, b) {
-        if (a.isCompleted != b.isCompleted) {
-          return a.isCompleted ? 1 : -1;
-        }
-        return (b.dueDate ?? DateTime(2000)).compareTo(a.dueDate ?? DateTime(2000));
-      });
-    final displayTasks = recentTasks.take(5).toList();
+    try {
+      final tasks = _tasks;
+      final groups = _groups;
+      final pendingCount = tasks.where((t) => !t.isCompleted).length;
+      // Mostra só as 5 tarefas mais recentes (pendentes primeiro)
+      final recentTasks = List<Task>.from(tasks)
+        ..sort((a, b) {
+          if (a.isCompleted != b.isCompleted) {
+            return a.isCompleted ? 1 : -1;
+          }
+          return (b.dueDate ?? DateTime(2000))
+              .compareTo(a.dueDate ?? DateTime(2000));
+        });
+      final displayTasks = recentTasks.take(5).toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF060B1A),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: ListView(
-            children: [
-              const SizedBox(height: 20),
-              const HeaderWidget(),
-              const SizedBox(height: 30),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  StatCardWidget(
-                    title: "Tarefas",
-                    value: tasks.length.toString(),
-                    icon: Icons.check_box_outlined,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF4E3BFF), Color(0xFF2A2C7C)],
+      return Scaffold(
+        backgroundColor: const Color(0xFF060B1A),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: ListView(
+              children: [
+                const SizedBox(height: 20),
+                const HeaderWidget(),
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    StatCardWidget(
+                      title: "Tarefas",
+                      value: tasks.length.toString(),
+                      icon: Icons.check_box_outlined,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF4E3BFF), Color(0xFF2A2C7C)],
+                      ),
                     ),
-                  ),
-                  StatCardWidget(
-                    title: "Pendentes",
-                    value: pendingCount.toString(),
-                    icon: Icons.access_time,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                    StatCardWidget(
+                      title: "Pendentes",
+                      value: pendingCount.toString(),
+                      icon: Icons.access_time,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 30),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "Meus Grupos",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  ],
+                ),
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Meus Grupos",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _goToTab(2),
-                    child: const Text(
-                      "Ver todos",
-                      style: TextStyle(color: Color(0xFF6C63FF)),
+                    GestureDetector(
+                      onTap: () => _goToTab(2),
+                      child: const Text(
+                        "Ver todos",
+                        style: TextStyle(color: Color(0xFF6C63FF)),
+                      ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 130,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: groups.length,
+                    itemBuilder: (context, index) {
+                      final group = groups[index];
+                      final memberCount = group.memberIds?.length ?? 0;
+                      final gradient =
+                          _groupGradients[index % _groupGradients.length];
+                      return GroupCardWidget(
+                        title: group.name ?? '',
+                        members: '$memberCount membros',
+                        gradient: gradient,
+                      );
+                    },
                   ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              SizedBox(
-                height: 130,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: groups.length,
+                ),
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Tarefas Recentes",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => _goToTab(1),
+                      child: const Text(
+                        "Ver todas",
+                        style: TextStyle(color: Color(0xFF6C63FF)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: displayTasks.length,
                   itemBuilder: (context, index) {
-                    final group = groups[index];
-                    final memberCount = group.memberIds?.length ?? 0;
-                    final gradient = _groupGradients[index % _groupGradients.length];
-                    return GroupCardWidget(
-                      title: group.name ?? '',
-                      members: '$memberCount membros',
-                      gradient: gradient,
+                    final task = displayTasks[index];
+                    return TaskListCard(
+                      task: task,
+                      onToggle: () => _toggleTask(task),
                     );
                   },
                 ),
-              ),
-
-              const SizedBox(height: 30),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "Tarefas Recentes",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _goToTab(1),
-                    child: const Text(
-                      "Ver todas",
-                      style: TextStyle(color: Color(0xFF6C63FF)),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: displayTasks.length,
-                itemBuilder: (context, index) {
-                  final task = displayTasks[index];
-                  return TaskListCard(
-                    task: task,
-                    onToggle: () => _toggleTask(task),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 20),
-            ],
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF060B1A),
+        body: Center(
+          child: Text(
+            'Erro: ${e.toString()}',
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
   }
 }

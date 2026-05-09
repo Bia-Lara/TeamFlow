@@ -4,6 +4,7 @@ import '../widgets/auth_button.dart';
 import 'register_page.dart';
 import '../../../../core/layout/main_page.dart';
 import '../../data/auth_service.dart';
+import '../../data/user_session.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -55,7 +56,10 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final user = await _authService.login(email, password);
-      // TODO: Store user session/token for future use
+      // Store user in session
+      UserSession().setCurrentUser(user);
+      print('✅ Login bem-sucedido: ${user.name} (${user.email})');
+      print('✅ Usuário armazenado em sessão');
 
       if (mounted) {
         _showSnackBar('Login realizado com sucesso!', isError: false);

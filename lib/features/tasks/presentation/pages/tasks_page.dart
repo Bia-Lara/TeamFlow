@@ -7,6 +7,7 @@ import '../widgets/task_filter_chips.dart';
 import '../widgets/task_filter_sheet.dart';
 import '../widgets/task_search_bar.dart';
 import 'task_form_page.dart';
+import '../../../auth/data/user_session.dart';
 
 class TasksPage extends StatefulWidget {
   const TasksPage({super.key});
@@ -43,7 +44,8 @@ class _TasksPageState extends State<TasksPage> {
   }
 
   List<Task> get _filteredTasks {
-    var tasks = _mock.getTasksForUser(_mock.currentUser.id!);
+    final user = UserSession().currentUser ?? _mock.currentUser;
+    var tasks = _mock.getTasksForUser(user.id!);
 
     // Filtro por status
     switch (_filter) {
@@ -59,12 +61,14 @@ class _TasksPageState extends State<TasksPage> {
 
     // Filtro avançado - prioridade
     if (_advancedFilter.priority != null) {
-      tasks = tasks.where((t) => t.priority == _advancedFilter.priority).toList();
+      tasks =
+          tasks.where((t) => t.priority == _advancedFilter.priority).toList();
     }
 
     // Filtro avançado - grupo
     if (_advancedFilter.groupName != null) {
-      tasks = tasks.where((t) => t.groupName == _advancedFilter.groupName).toList();
+      tasks =
+          tasks.where((t) => t.groupName == _advancedFilter.groupName).toList();
     }
 
     // Pesquisa
@@ -196,14 +200,14 @@ class _TasksPageState extends State<TasksPage> {
 
     final todayTasks =
         filtered.where((t) => !t.isCompleted && _isToday(t.dueDate)).toList();
-    final tomorrowTasks =
-        filtered.where((t) => !t.isCompleted && _isTomorrow(t.dueDate)).toList();
+    final tomorrowTasks = filtered
+        .where((t) => !t.isCompleted && _isTomorrow(t.dueDate))
+        .toList();
     final overdueTasks =
         filtered.where((t) => !t.isCompleted && _isOverdue(t.dueDate)).toList();
     final futureTasks =
         filtered.where((t) => !t.isCompleted && _isFuture(t.dueDate)).toList();
-    final completedTasks =
-        filtered.where((t) => t.isCompleted).toList();
+    final completedTasks = filtered.where((t) => t.isCompleted).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
