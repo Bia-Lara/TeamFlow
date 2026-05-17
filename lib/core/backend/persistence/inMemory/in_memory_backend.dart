@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../features/profile/data/user.entity.dart';
+import '../../../../features/profile/data/user.entity.dart';
 
 class InMemoryBackend {
   InMemoryBackend._internal();

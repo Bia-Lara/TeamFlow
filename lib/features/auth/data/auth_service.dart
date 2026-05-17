@@ -1,5 +1,5 @@
 import '../../profile/data/user.entity.dart';
-import '../../../../core/backend/sqlite_backend.dart';
+import '../../../core/backend/persistence/SQLite/sqlite_backend.dart';
 
 class AuthService {
   AuthService();

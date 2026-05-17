@@ -5,8 +5,8 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import '../../features/profile/data/user.entity.dart';
-import '../security/password_hash.dart' as pw_hash;
+import '../../../../features/profile/data/user.entity.dart';
+import '../../../security/password_hash.dart' as pw_hash;
 
 class SqliteBackend {
   SqliteBackend._internal();
