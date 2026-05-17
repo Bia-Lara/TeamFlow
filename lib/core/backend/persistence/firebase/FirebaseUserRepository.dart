@@ -42,8 +42,10 @@ class FirebaseUserRepository implements Persistency<User, String> {
   }
   
   @override
-  Future<List<User>> getByStringColumn(String columnName, String value) async {
+  Future<List<User>> getByStringColumn(String columnName, String? value) async {
     // TODO: implement getByStringColumn
+    if (value == null) throw Exception("Valor não deve ser nulo!");
+
     var snapshot = await _usersColl.where(columnName, isEqualTo: value).get(); 
     
     return snapshot.docs.map((doc) {

@@ -13,15 +13,16 @@ class UserService {
     if (user.name == null) throw Exception("Valor inválido para o campo: Nome");
     if (user.password == null) throw Exception("Valor inválido para o campo: Senha");
 
-    var repeattedMail = await usersColl.where('email', isEqualTo: user.email).get();
-    var repeattedName = await usersColl.where('name', isEqualTo: user.name).get();
+    var repeatedEmail = await userRepository.getByStringColumn("email", user.email);
+    
+    var repeatedName = await userRepository.getByStringColumn("name", user.name); 
 
+    if (repeatedEmail.isEmpty) throw Exception("Email já cadastrado!");
+    if (repeatedName.isEmpty) throw Exception("Nome já cadastrado!");
 
-    if (repeattedMail.docs.isNotEmpty) throw Exception("Email já cadastrado!");
-    if (repeattedName.docs.isNotEmpty) throw Exception("Nome já cadastrado!");
-
+    var password = user.password ?? '';
     user.email = email;
-    user.password = pw_hash.generateSaltedHash(user.password);
+    user.password = pw_hash.generateSaltedHash(password)['hash'];
 
     return userRepository.register(user);
   }
