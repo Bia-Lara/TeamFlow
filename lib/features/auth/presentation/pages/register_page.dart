@@ -5,6 +5,7 @@ import '../../../../core/layout/main_page.dart';
 import '../../../profile/data/user.entity.dart';
 import '../../data/auth_service.dart';
 import '../../data/user_session.dart';
+import '../../../../core/backend/service/userService.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -18,6 +19,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _userService = UserService();
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
@@ -71,10 +73,8 @@ class _RegisterPageState extends State<RegisterPage> {
       groupIds: [],
     );
 
-    final authService = AuthService();
-
     try {
-      final created = await authService.register(newUser);
+      final created = await _userService.register(newUser);
 
       // Store the created user's ID in session
       UserSession().setCurrentUser(created);

@@ -2,11 +2,23 @@ import 'package:flutter/material.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  Firebase.initializeApp(
+
+  print('==============================================');
+  print('🔥 VERIFICANDO CREDENCIAIS DO FIREBASE WEB:');
+  print('ID do Projeto: ${DefaultFirebaseOptions.currentPlatform.projectId}');
+  print('API Key: ${DefaultFirebaseOptions.currentPlatform.apiKey}');
+  print('App ID: ${DefaultFirebaseOptions.currentPlatform.appId}');
+  print('==============================================');
+
+  await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: false, // Desativa o cache local que costuma travar o navegador
   );
 
   runApp(const MainApp());
