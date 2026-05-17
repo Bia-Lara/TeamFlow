@@ -1,11 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../Persistency.dart';
+import '../../Persistency.dart';
 import '../../../../features/profile/data/user.entity.dart';
 
-class FirebaseUserPersistence implements Persistency<User, String> {
-  FirebaseUserPersistence._internal();
-  static final FirebaseUserPersistence instance = FirebaseUserPersistence._internal();
-  static final CollectionReference _usersColl = FirebaseFirestore.instance.collection('users');
+class FirebaseUserRepository implements Persistency<User, String> {
+  FirebaseUserRepository._internal();
+  static final FirebaseUserRepository instance = FirebaseUserRepository._internal();
+  CollectionReference _usersColl = FirebaseFirestore.instance.collection('users');
   
   @override
   void delete(String key) {
@@ -39,5 +39,17 @@ class FirebaseUserPersistence implements Persistency<User, String> {
   Future<User> update(User user) {
     // TODO: implement update
     throw UnimplementedError();
+  }
+  
+  @override
+  Future<List<User>> getByStringColumn(String columnName, String value) async {
+    // TODO: implement getByStringColumn
+    var snapshot = await _usersColl.where(columnName, isEqualTo: value).get(); 
+    
+    return snapshot.docs.map((doc) {
+      var data = doc.data() as Map<String, dynamic>;
+
+      return User.fromJson(data);
+    }).toList();
   }
 }

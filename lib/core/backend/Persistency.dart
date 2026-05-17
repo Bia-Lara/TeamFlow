@@ -6,4 +6,6 @@ abstract class Persistency<F, K> {
   void delete(K key);
 
   Future<F> getById(K entity);
+
+  Future<List<F>> getByStringColumn(String columnName, String value);
 }
