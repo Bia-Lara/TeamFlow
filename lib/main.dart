@@ -6,14 +6,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  print('==============================================');
-  print('🔥 VERIFICANDO CREDENCIAIS DO FIREBASE WEB:');
-  print('ID do Projeto: ${DefaultFirebaseOptions.currentPlatform.projectId}');
-  print('API Key: ${DefaultFirebaseOptions.currentPlatform.apiKey}');
-  print('App ID: ${DefaultFirebaseOptions.currentPlatform.appId}');
-  print('==============================================');
-
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
