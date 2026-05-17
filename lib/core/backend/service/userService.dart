@@ -1,7 +1,6 @@
 import '../Persistency.dart';
 import '../persistence/firebase/FirebaseUserRepository.dart';
 import '../../../../features/profile/data/user.entity.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../security/password_hash.dart' as pw_hash;
 
 class UserService {
