@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "360701359285",
+    "project_id": "teamflow-34bed",
+    "storage_bucket": "teamflow-34bed.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:360701359285:android:b7ef8b56c07313722e3afc",
+        "android_client_info": {
+          "package_name": "com.example.team_flow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRAWeWMDyqieAStOVM7WLyHZ04YFMSfYQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
