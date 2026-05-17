@@ -3,7 +3,9 @@ import '../widgets/auth_field.dart';
 import '../widgets/auth_button.dart';
 import 'register_page.dart';
 import '../../../../core/layout/main_page.dart';
-import '../../../profile/data/mock_user.dart';
+import '../../data/auth_service.dart';
+import '../../data/user_session.dart';
+import '../../../../core/backend/service/userService.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,6 +19,13 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  late UserService _userService;
+
+  @override
+  void initState() {
+    super.initState();
+    _userService = UserService();
+  }
 
   @override
   void dispose() {
@@ -46,21 +55,27 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
 
-    // TODO: integrar com backend — POST /auth/login
-    // Simulando delay de rede
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      final user = await _userService.login(email, password);
+      // Store user in session
+      UserSession().setCurrentUser(user);
+      print('✅ Login bem-sucedido: ${user.name} (${user.email})');
+      print('✅ Usuário armazenado em sessão');
 
-    // Mock: valida com dados locais
-    final mockUser = getMockUser();
-    if (email == mockUser.email && password == mockUser.password) {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MainPage()),
-      );
-    } else {
-      setState(() => _isLoading = false);
-      _showSnackBar('E-mail ou senha incorretos');
+      if (mounted) {
+        _showSnackBar('Login realizado com sucesso!', isError: false);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const MainPage()),
+          );
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showSnackBar(e.toString());
+      }
     }
   }
 

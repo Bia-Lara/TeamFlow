@@ -3,6 +3,9 @@ import '../widgets/auth_field.dart';
 import '../widgets/auth_button.dart';
 import '../../../../core/layout/main_page.dart';
 import '../../../profile/data/user.entity.dart';
+import '../../data/auth_service.dart';
+import '../../data/user_session.dart';
+import '../../../../core/backend/service/userService.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -16,6 +19,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _userService = UserService();
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
@@ -62,11 +66,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
     setState(() => _isLoading = true);
 
-    // TODO: integrar com backend — POST /auth/register
-    // Simulando delay de rede
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Mock: cria o objeto User (pronto para enviar ao backend)
     final newUser = User(
       name: name,
       email: email,
@@ -74,21 +73,30 @@ class _RegisterPageState extends State<RegisterPage> {
       groupIds: [],
     );
 
-    // Log para debug — remover quando integrar com backend
-    debugPrint('Usuário criado: ${newUser.toJson()}');
+    try {
+      final created = await _userService.register(newUser);
 
-    if (!mounted) return;
+      // Store the created user's ID in session
+      UserSession().setCurrentUser(created);
 
-    _showSnackBar('Conta criada com sucesso', isError: false);
+      if (!mounted) return;
 
-    await Future.delayed(const Duration(milliseconds: 500));
+      _showSnackBar('Conta criada com sucesso', isError: false);
 
-    if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 500));
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const MainPage()),
-    );
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainPage()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -214,8 +222,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       icon: Icons.lock_outline,
                       isObscured: _obscurePassword,
                       onToggleObscure: () {
-                        setState(
-                            () => _obscurePassword = !_obscurePassword);
+                        setState(() => _obscurePassword = !_obscurePassword);
                       },
                     ),
 
@@ -228,8 +235,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       icon: Icons.lock_outline,
                       isObscured: _obscureConfirm,
                       onToggleObscure: () {
-                        setState(
-                            () => _obscureConfirm = !_obscureConfirm);
+                        setState(() => _obscureConfirm = !_obscureConfirm);
                       },
                     ),
 

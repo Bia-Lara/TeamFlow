@@ -1,39 +1,42 @@
 import 'package:flutter/material.dart';
+import '../../../auth/data/user_session.dart';
+import '../../../../core/data/mock_data.dart';
 
 class HeaderWidget extends StatelessWidget {
   const HeaderWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final mockData = MockData();
+    final user = UserSession().currentUser ?? mockData.currentUser;
+    final initials =
+        (user.name?.split(' ').map((e) => e[0]).join() ?? 'U').toUpperCase();
+
     return Row(
       children: [
-
-        const CircleAvatar(
+        CircleAvatar(
           radius: 26,
-          backgroundColor: Color(0xFF5B7CFF),
+          backgroundColor: const Color(0xFF5B7CFF),
           child: Text(
-            "JD",
-            style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold),
+            initials,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
-
         const SizedBox(width: 12),
-
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            Text(
+            const Text(
               "Bem-vindo,",
               style: TextStyle(
                 color: Colors.white54,
                 fontSize: 14,
               ),
             ),
-
             Text(
-              "Joao Dias",
-              style: TextStyle(
+              user.name ?? 'Usuário',
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -41,7 +44,6 @@ class HeaderWidget extends StatelessWidget {
             ),
           ],
         ),
-
         const Spacer(),
       ],
     );

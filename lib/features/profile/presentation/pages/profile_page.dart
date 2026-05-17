@@ -6,6 +6,7 @@ import '../widgets/profile_menu_item.dart';
 import 'edit_profile_page.dart';
 import '../../../../core/data/mock_data.dart';
 import '../../../auth/presentation/pages/login_page.dart';
+import '../../../auth/data/user_session.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -17,7 +18,15 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final _mock = MockData();
 
-  User get _user => _mock.currentUser;
+  User get _user {
+    final sessionUser = UserSession().currentUser;
+    print('DEBUG: SessionUser = $sessionUser');
+    print('DEBUG: MockUser = ${_mock.currentUser}');
+    if (sessionUser == null) {
+      throw Exception('Nenhum usuário logado. Faça login primeiro!');
+    }
+    return sessionUser;
+  }
 
   int get _totalTasks => _mock.getTasksForUser(_user.id!).length;
   int get _completedTasks =>
@@ -35,6 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
     if (result != null) {
       setState(() {
+        UserSession().setCurrentUser(result);
         _mock.currentUser = result;
         // Atualiza também na lista de users
         final idx = _mock.allUsers.indexWhere((u) => u.id == result.id);
@@ -67,7 +77,8 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // TODO: integrar com backend — limpar sessão/token
+              // Clear user session
+              UserSession().logout();
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginPage()),

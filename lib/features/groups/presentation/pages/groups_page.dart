@@ -3,6 +3,7 @@ import '../../data/group.entity.dart';
 import '../widgets/group_list_card.dart';
 import 'group_detail_page.dart';
 import '../../../../core/data/mock_data.dart';
+import '../../../auth/data/user_session.dart';
 
 class GroupsPage extends StatefulWidget {
   const GroupsPage({super.key});
@@ -23,7 +24,8 @@ class _GroupsPageState extends State<GroupsPage> {
   }
 
   List<Group> get _filteredGroups {
-    final userGroups = _mock.getGroupsForUser(_mock.currentUser.id!);
+    final user = UserSession().currentUser ?? _mock.currentUser;
+    final userGroups = _mock.getGroupsForUser(user.id!);
     if (_searchQuery.isEmpty) return userGroups;
     final q = _searchQuery.toLowerCase();
     return userGroups
@@ -74,7 +76,8 @@ class _GroupsPageState extends State<GroupsPage> {
                               _searchController.clear();
                               setState(() => _searchQuery = '');
                             },
-                            icon: const Icon(Icons.close, color: Colors.white38),
+                            icon:
+                                const Icon(Icons.close, color: Colors.white38),
                           )
                         : null,
                     border: InputBorder.none,
