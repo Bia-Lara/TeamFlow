@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../data/group.entity.dart';
 import '../../../../core/data/mock_data.dart';
+import '../../../../core/backend/service/GroupService.dart';
+import '../../../auth/data/user_session.dart';
+
 
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({super.key});
@@ -10,9 +13,9 @@ class CreateGroupPage extends StatefulWidget {
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
-  final _mock = MockData();
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
+  final _groupService = GroupService();
 
   @override
   void dispose() {
@@ -21,7 +24,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     super.dispose();
   }
 
-  void _createGroup() {
+  void _createGroup() async {
     final name = _nameController.text.trim();
     final desc = _descController.text.trim();
 
@@ -35,25 +38,41 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       return;
     }
 
-    // TODO: integrar com backend — POST /groups
-    final newId = DateTime.now().millisecondsSinceEpoch.toString();
-    final group = Group(
-      id: newId,
-      name: name,
-      description: desc,
-      memberIds: [_mock.currentUser.id!],
-    );
+    try {
+      // Recupera o ID do usuário logado na sessão ativa
+      final currentUserId = UserSession().currentUser?.id;
+      if (currentUserId == null) throw Exception("Sessão expirada. Faça login novamente.");
 
-    _mock.groups.add(group);
+      final groupPayload = Group(
+        name: name,
+        description: desc,
+        memberIds: [currentUserId],
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Grupo "$name" criado'),
-        backgroundColor: const Color(0xFF6C63FF),
-      ),
-    );
+      // Envia para o Firebase através do service
+      final createdGroup = await _groupService.createGroup(groupPayload);
 
-    Navigator.pop(context, group);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Grupo "$name" criado'),
+          backgroundColor: const Color(0xFF6C63FF),
+        ),
+      );
+
+      // Retorna o objeto real do grupo para quem abriu essa tela
+      Navigator.pop(context, createdGroup);
+      
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: const Color(0xFFFF4757),
+        ),
+      );
+    }
   }
 
   @override
