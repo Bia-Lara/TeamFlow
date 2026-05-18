@@ -11,6 +11,17 @@ class Group {
     this.memberIds,
   });
 
+  factory Group.fromJson(Map<String, dynamic> json) {
+    return Group(
+      id: json['id'],
+      name: json['name'],
+      description: json['description'],
+      memberIds: json['memberIds'] != null
+          ? List<String>.from(json['memberIds'])
+          : null,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
