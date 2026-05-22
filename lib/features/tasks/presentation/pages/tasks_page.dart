@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/task.dart';
+import '../../data/task_service.dart';
 import '../../../../core/data/mock_data.dart';
 import '../widgets/task_list_card.dart';
 import '../widgets/task_section_header.dart';
@@ -18,6 +19,8 @@ class TasksPage extends StatefulWidget {
 
 class _TasksPageState extends State<TasksPage> {
   final _mock = MockData();
+  final _taskService = TaskService();
+
   TaskFilter _filter = TaskFilter.todas;
   TaskFilterOptions _advancedFilter = const TaskFilterOptions();
   String _searchQuery = '';
@@ -32,10 +35,7 @@ class _TasksPageState extends State<TasksPage> {
     'futuras': true,
   };
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  String get _userId => UserSession().currentUser?.id ?? _mock.currentUser.id!;
 
   @override
   void dispose() {
@@ -43,11 +43,7 @@ class _TasksPageState extends State<TasksPage> {
     super.dispose();
   }
 
-  List<Task> get _filteredTasks {
-    final user = UserSession().currentUser ?? _mock.currentUser;
-    var tasks = _mock.getTasksForUser(user.id!);
-
-    // Filtro por status
+  List<Task> _applyFilters(List<Task> tasks) {
     switch (_filter) {
       case TaskFilter.pendentes:
         tasks = tasks.where((t) => !t.isCompleted).toList();
@@ -59,19 +55,16 @@ class _TasksPageState extends State<TasksPage> {
         break;
     }
 
-    // Filtro avançado - prioridade
     if (_advancedFilter.priority != null) {
       tasks =
           tasks.where((t) => t.priority == _advancedFilter.priority).toList();
     }
 
-    // Filtro avançado - grupo
     if (_advancedFilter.groupName != null) {
       tasks =
           tasks.where((t) => t.groupName == _advancedFilter.groupName).toList();
     }
 
-    // Pesquisa
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       tasks = tasks.where((t) {
@@ -118,14 +111,31 @@ class _TasksPageState extends State<TasksPage> {
     return date.isAfter(start) || date.isAtSameMomentAs(start);
   }
 
-  void _toggleTask(Task task) {
-    setState(() {
-      task.isCompleted = !task.isCompleted;
-    });
+  Future<void> _toggleTask(Task task) async {
+    try {
+      if (task.isCompleted) {
+        // Desmarca: usa updateTask
+        await _taskService.updateTask(
+          task.copyWith(isCompleted: false),
+          _userId,
+        );
+      } else {
+        // Marca como concluída
+        await _taskService.completeTask(_userId, task.id!);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao atualizar tarefa: $e'),
+            backgroundColor: const Color(0xFFFF4757),
+          ),
+        );
+      }
+    }
   }
 
-  void _openFilterSheet() async {
-    final allTasks = _mock.getTasksForUser(_mock.currentUser.id!);
+  void _openFilterSheet(List<Task> allTasks) async {
     final groups = allTasks
         .map((t) => t.groupName)
         .where((g) => g != null)
@@ -150,21 +160,11 @@ class _TasksPageState extends State<TasksPage> {
   }
 
   void _openEditTask(Task task) async {
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => TaskFormPage(task: task)),
     );
-    if (result == null) return;
-    if (result is String && result == 'delete') {
-      setState(() => _mock.tasks.removeWhere((t) => t.id == task.id));
-    } else if (result is Task) {
-      setState(() {
-        final index = _mock.tasks.indexWhere((t) => t.id == result.id);
-        if (index != -1) {
-          _mock.tasks[index] = result;
-        }
-      });
-    }
+    // Não precisa fazer nada — o stream atualiza automaticamente
   }
 
   Widget _buildSection(String key, String title, List<Task> tasks) {
@@ -196,129 +196,179 @@ class _TasksPageState extends State<TasksPage> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredTasks;
-
-    final todayTasks =
-        filtered.where((t) => !t.isCompleted && _isToday(t.dueDate)).toList();
-    final tomorrowTasks = filtered
-        .where((t) => !t.isCompleted && _isTomorrow(t.dueDate))
-        .toList();
-    final overdueTasks =
-        filtered.where((t) => !t.isCompleted && _isOverdue(t.dueDate)).toList();
-    final futureTasks =
-        filtered.where((t) => !t.isCompleted && _isFuture(t.dueDate)).toList();
-    final completedTasks = filtered.where((t) => t.isCompleted).toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: ListView(
-            children: [
-              const SizedBox(height: 20),
+        child: StreamBuilder<List<Task>>(
+          stream: _taskService.streamUserTasks(_userId),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Erro ao carregar tarefas:\n${snapshot.error}',
+                  style: const TextStyle(color: Colors.white54),
+                  textAlign: TextAlign.center,
+                ),
+              );
+            }
 
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            final allTasks = snapshot.data ?? [];
+            final filtered = _applyFilters(allTasks);
+
+            final todayTasks = filtered
+                .where((t) => !t.isCompleted && _isToday(t.dueDate))
+                .toList();
+            final tomorrowTasks = filtered
+                .where((t) => !t.isCompleted && _isTomorrow(t.dueDate))
+                .toList();
+            final overdueTasks = filtered
+                .where((t) => !t.isCompleted && _isOverdue(t.dueDate))
+                .toList();
+            final futureTasks = filtered
+                .where((t) => !t.isCompleted && _isFuture(t.dueDate))
+                .toList();
+            final completedTasks =
+                filtered.where((t) => t.isCompleted).toList();
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: ListView(
                 children: [
-                  const Text(
-                    'Minhas Tarefas',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  const SizedBox(height: 20),
+
+                  // Header
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      GestureDetector(
-                        onTap: () {
-                          setState(() => _showSearch = !_showSearch);
-                          if (!_showSearch) {
-                            _searchController.clear();
-                            _searchQuery = '';
-                          }
-                        },
-                        child: Icon(
-                          _showSearch ? Icons.search_off : Icons.search,
-                          color: Colors.white54,
+                      const Text(
+                        'Minhas Tarefas',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      GestureDetector(
-                        onTap: _openFilterSheet,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
+                      Row(
+                        children: [
+                          // Loading indicator sutil enquanto conecta
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF6C63FF),
+                              ),
+                            ),
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting)
+                            const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _showSearch = !_showSearch);
+                              if (!_showSearch) {
+                                _searchController.clear();
+                                _searchQuery = '';
+                              }
+                            },
+                            child: Icon(
+                              _showSearch ? Icons.search_off : Icons.search,
+                              color: Colors.white54,
+                            ),
                           ),
-                          decoration: BoxDecoration(
-                            color: _hasActiveFilters
-                                ? const Color(0xFF6C63FF)
-                                : const Color(0xFF0F1733),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white12),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.filter_list,
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => _openFilterSheet(allTasks),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
                                 color: _hasActiveFilters
-                                    ? Colors.white
-                                    : Colors.white54,
-                                size: 18,
+                                    ? const Color(0xFF6C63FF)
+                                    : const Color(0xFF0F1733),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white12),
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Filtrar',
-                                style: TextStyle(
-                                  color: _hasActiveFilters
-                                      ? Colors.white
-                                      : Colors.white54,
-                                  fontSize: 14,
-                                ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.filter_list,
+                                    color: _hasActiveFilters
+                                        ? Colors.white
+                                        : Colors.white54,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Filtrar',
+                                    style: TextStyle(
+                                      color: _hasActiveFilters
+                                          ? Colors.white
+                                          : Colors.white54,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
+
+                  const SizedBox(height: 16),
+
+                  if (_showSearch) ...[
+                    TaskSearchBar(
+                      controller: _searchController,
+                      onChanged: (value) {
+                        setState(() => _searchQuery = value);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  TaskFilterChips(
+                    selected: _filter,
+                    onSelected: (f) => setState(() => _filter = f),
+                  ),
+
+                  // Sem tarefas
+                  if (filtered.isEmpty &&
+                      snapshot.connectionState != ConnectionState.waiting)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 60),
+                      child: Column(
+                        children: [
+                          Icon(Icons.check_circle_outline,
+                              color: Colors.white24, size: 64),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Nenhuma tarefa encontrada',
+                            style:
+                                TextStyle(color: Colors.white38, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  if (overdueTasks.isNotEmpty)
+                    _buildSection('atrasadas', 'Atrasadas', overdueTasks),
+                  _buildSection('hoje', 'Hoje', todayTasks),
+                  _buildSection('amanha', 'Amanhã', tomorrowTasks),
+                  if (futureTasks.isNotEmpty)
+                    _buildSection('futuras', 'Próximos dias', futureTasks),
+                  _buildSection('concluidas', 'Concluídas', completedTasks),
+
+                  const SizedBox(height: 20),
                 ],
               ),
-
-              const SizedBox(height: 16),
-
-              // Search bar
-              if (_showSearch) ...[
-                TaskSearchBar(
-                  controller: _searchController,
-                  onChanged: (value) {
-                    setState(() => _searchQuery = value);
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // Filter chips
-              TaskFilterChips(
-                selected: _filter,
-                onSelected: (f) => setState(() => _filter = f),
-              ),
-
-              // Sections
-              if (overdueTasks.isNotEmpty)
-                _buildSection('atrasadas', 'Atrasadas', overdueTasks),
-              _buildSection('hoje', 'Hoje', todayTasks),
-              _buildSection('amanha', 'Amanhã', tomorrowTasks),
-              if (futureTasks.isNotEmpty)
-                _buildSection('futuras', 'Próximos dias', futureTasks),
-              _buildSection('concluidas', 'Concluídas', completedTasks),
-
-              const SizedBox(height: 20),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
