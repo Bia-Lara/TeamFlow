@@ -7,6 +7,8 @@ import 'edit_profile_page.dart';
 import '../../../../core/data/mock_data.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/data/user_session.dart';
+import '../../../tasks/data/task_service.dart';
+import '../../../tasks/domain/task.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -17,36 +19,27 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _mock = MockData();
+  final _taskService = TaskService();
 
   User get _user {
     final sessionUser = UserSession().currentUser;
-    print('DEBUG: SessionUser = $sessionUser');
-    print('DEBUG: MockUser = ${_mock.currentUser}');
     if (sessionUser == null) {
       throw Exception('Nenhum usuário logado. Faça login primeiro!');
     }
     return sessionUser;
   }
 
-  int get _totalTasks => _mock.getTasksForUser(_user.id!).length;
-  int get _completedTasks =>
-      _mock.getTasksForUser(_user.id!).where((t) => t.isCompleted).length;
   int get _groupCount => _mock.getGroupsForUser(_user.id!).length;
-  int get _completedPercent =>
-      _totalTasks > 0 ? ((_completedTasks / _totalTasks) * 100).round() : 0;
 
   void _openEditProfile() async {
     final result = await Navigator.push<User>(
       context,
-      MaterialPageRoute(
-        builder: (_) => EditProfilePage(user: _user),
-      ),
+      MaterialPageRoute(builder: (_) => EditProfilePage(user: _user)),
     );
     if (result != null) {
       setState(() {
         UserSession().setCurrentUser(result);
         _mock.currentUser = result;
-        // Atualiza também na lista de users
         final idx = _mock.allUsers.indexWhere((u) => u.id == result.id);
         if (idx != -1) _mock.allUsers[idx] = result;
       });
@@ -58,17 +51,11 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF0F1733),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Text(
-          'Sair da conta',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Tem certeza que deseja sair?',
-          style: TextStyle(color: Colors.white70),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title:
+            const Text('Sair da conta', style: TextStyle(color: Colors.white)),
+        content: const Text('Tem certeza que deseja sair?',
+            style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -77,7 +64,6 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // Clear user session
               UserSession().logout();
               Navigator.pushAndRemoveUntil(
                 context,
@@ -85,10 +71,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 (route) => false,
               );
             },
-            child: const Text(
-              'Sair',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child:
+                const Text('Sair', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -100,179 +84,184 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
+        child: StreamBuilder<List<Task>>(
+          stream: _taskService.streamUserTasks(_user.id!),
+          builder: (context, snapshot) {
+            final tasks = snapshot.data ?? [];
+            final totalTasks = tasks.length;
+            final completedTasks = tasks.where((t) => t.isCompleted).length;
+            final completedPercent = totalTasks > 0
+                ? ((completedTasks / totalTasks) * 100).round()
+                : 0;
+            final isLoading =
+                snapshot.connectionState == ConnectionState.waiting;
 
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Perfil',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _confirmLogout,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F1733),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(
-                        Icons.logout,
-                        color: Colors.white54,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                  const SizedBox(height: 20),
 
-              const SizedBox(height: 24),
-
-              // User info card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0F1733), Color(0xFF1B2550)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.05),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        ProfileAvatar(
-                          name: _user.name ?? '',
-                          radius: 32,
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Perfil',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _user.name ?? '',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _user.email ?? '',
-                                style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
+                      ),
+                      GestureDetector(
+                        onTap: _confirmLogout,
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F1733),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.logout,
+                              color: Colors.white54, size: 22),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // User info card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0F1733), Color(0xFF1B2550)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            ProfileAvatar(name: _user.name ?? '', radius: 32),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF6C63FF),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Text(
-                                      'Membro',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                  Text(
+                                    _user.name ?? '',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(height: 4),
                                   Text(
-                                    '$_groupCount grupos',
+                                    _user.email ?? '',
                                     style: const TextStyle(
-                                      color: Colors.white54,
-                                      fontSize: 13,
-                                    ),
+                                        color: Colors.white54, fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF6C63FF),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: const Text(
+                                          'Membro',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        '$_groupCount grupos',
+                                        style: const TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 13),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 20),
+                        isLoading
+                            ? const SizedBox(
+                                height: 48,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFF6C63FF),
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : ProfileStatsCard(
+                                totalTasks: totalTasks,
+                                totalGroups: _groupCount,
+                                completedPercent: completedPercent,
+                              ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    ProfileStatsCard(
-                      totalTasks: _totalTasks,
-                      totalGroups: _groupCount,
-                      completedPercent: _completedPercent,
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  ProfileMenuItem(
+                    icon: Icons.person_outline,
+                    iconColor: const Color(0xFF6C63FF),
+                    title: 'Editar Perfil',
+                    subtitle: 'Nome, e-mail e dados pessoais',
+                    onTap: _openEditProfile,
+                  ),
+                  ProfileMenuItem(
+                    icon: Icons.palette_outlined,
+                    iconColor: const Color(0xFF00D6A1),
+                    title: 'Aparência',
+                    subtitle: 'Tema e preferências visuais',
+                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Em breve'),
+                        backgroundColor: Color(0xFF6C63FF),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 28),
-
-              // Menu items
-              ProfileMenuItem(
-                icon: Icons.person_outline,
-                iconColor: const Color(0xFF6C63FF),
-                title: 'Editar Perfil',
-                subtitle: 'Nome, e-mail e dados pessoais',
-                onTap: _openEditProfile,
-              ),
-
-              ProfileMenuItem(
-                icon: Icons.palette_outlined,
-                iconColor: const Color(0xFF00D6A1),
-                title: 'Aparência',
-                subtitle: 'Tema e preferências visuais',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Em breve'),
-                      backgroundColor: Color(0xFF6C63FF),
+                  ),
+                  ProfileMenuItem(
+                    icon: Icons.help_outline,
+                    iconColor: const Color(0xFF00C2FF),
+                    title: 'Ajuda',
+                    subtitle: 'Dúvidas e suporte',
+                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Em breve'),
+                        backgroundColor: Color(0xFF6C63FF),
+                      ),
                     ),
-                  );
-                },
-              ),
+                  ),
 
-              ProfileMenuItem(
-                icon: Icons.help_outline,
-                iconColor: const Color(0xFF00C2FF),
-                title: 'Ajuda',
-                subtitle: 'Dúvidas e suporte',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Em breve'),
-                      backgroundColor: Color(0xFF6C63FF),
-                    ),
-                  );
-                },
+                  const SizedBox(height: 30),
+                ],
               ),
-
-              const SizedBox(height: 30),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
