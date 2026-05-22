@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../data/user.entity.dart';
 import '../../../auth/data/auth_service.dart';
 import '../widgets/profile_avatar.dart';
+import '../../../../core/backend/persistence/firebase/FirebaseUserRepository.dart';
 
 class EditProfilePage extends StatefulWidget {
   final User user;
@@ -21,12 +22,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _obscureConfirm = true;
   bool _isLoading = false;
 
-  late AuthService _authService;
+  late FirebaseUserRepository _userRepo;
 
   @override
   void initState() {
     super.initState();
-    _authService = AuthService();
+    _userRepo = FirebaseUserRepository.instance;
     _nameController = TextEditingController(text: widget.user.name ?? '');
     _emailController = TextEditingController(text: widget.user.email ?? '');
     _passwordController = TextEditingController();
@@ -72,7 +73,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         // Note: password update requires separate endpoint in future
       );
 
-      await _authService.updateUser(updatedUser);
+      await _userRepo.update(updatedUser);
 
       if (mounted) {
         _showSnackBar('Perfil atualizado com sucesso!', isSuccess: true);
@@ -145,7 +146,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         throw Exception('ID do usuário não encontrado');
       }
 
-      await _authService.deleteUser(userId);
+      await _userRepo.delete(userId);
 
       if (mounted) {
         _showSnackBar('Conta excluída com sucesso', isSuccess: true);
