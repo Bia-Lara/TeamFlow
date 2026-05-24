@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../domain/task.dart';
+import '../../data/task_service.dart';
 import '../../../../core/data/mock_data.dart';
+import '../../../auth/data/user_session.dart';
 
 class TaskFormPage extends StatefulWidget {
   final Task? task;
@@ -13,6 +15,8 @@ class TaskFormPage extends StatefulWidget {
 
 class _TaskFormPageState extends State<TaskFormPage> {
   final _mock = MockData();
+  final _taskService = TaskService();
+
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   TaskPriority _priority = TaskPriority.media;
@@ -20,14 +24,16 @@ class _TaskFormPageState extends State<TaskFormPage> {
   TimeOfDay _dueTime = TimeOfDay.now();
   late String _selectedGroupId;
   late List<_GroupOption> _groupOptions;
+  bool _isSaving = false;
 
   bool get _isEditing => widget.task != null;
+
+  String get _userId => UserSession().currentUser?.id ?? _mock.currentUser.id!;
 
   @override
   void initState() {
     super.initState();
 
-    // Monta lista de grupos do usuário
     final userGroups = _mock.getGroupsForUser(_mock.currentUser.id!);
     _groupOptions = userGroups
         .map((g) => _GroupOption(id: g.id!, name: g.name ?? ''))
@@ -63,7 +69,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
     }
   }
 
-  void _save() {
+  Future<void> _save() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,38 +81,93 @@ class _TaskFormPageState extends State<TaskFormPage> {
       return;
     }
 
-    final dueDateTime = DateTime(
-      _dueDate.year,
-      _dueDate.month,
-      _dueDate.day,
-      _dueTime.hour,
-      _dueTime.minute,
-    );
+    setState(() => _isSaving = true);
 
-    final task = Task(
-      id: _isEditing
-          ? widget.task!.id
-          : DateTime.now().millisecondsSinceEpoch.toString(),
-      userId: _mock.currentUser.id,
-      title: title,
-      description: _descController.text.trim(),
-      groupId: _selectedGroupId,
-      groupName: _selectedGroupName,
-      dueDate: dueDateTime,
-      priority: _priority,
-      isCompleted: _isEditing ? widget.task!.isCompleted : false,
-    );
+    try {
+      final dueDateTime = DateTime(
+        _dueDate.year,
+        _dueDate.month,
+        _dueDate.day,
+        _dueTime.hour,
+        _dueTime.minute,
+      );
 
-    if (_isEditing) {
-      // TODO: integrar com backend — PUT /tasks/:id
-      final index = _mock.tasks.indexWhere((t) => t.id == task.id);
-      if (index != -1) _mock.tasks[index] = task;
-    } else {
-      // TODO: integrar com backend — POST /tasks
-      _mock.tasks.add(task);
+      final task = Task(
+        id: _isEditing ? widget.task!.id : null,
+        userId: _userId,
+        title: title,
+        description: _descController.text.trim(),
+        groupId: _selectedGroupId,
+        groupName: _selectedGroupName,
+        dueDate: dueDateTime,
+        priority: _priority,
+        isCompleted: _isEditing ? widget.task!.isCompleted : false,
+      );
+
+      Task savedTask;
+      if (_isEditing) {
+        savedTask = await _taskService.updateTask(task, _userId);
+      } else {
+        savedTask = await _taskService.createTask(task, _userId);
+      }
+
+      if (mounted) Navigator.pop(context, savedTask);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao salvar tarefa: $e'),
+            backgroundColor: const Color(0xFFFF4757),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
+  }
 
-    Navigator.pop(context, task);
+  Future<void> _confirmDelete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0F1733),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title:
+            const Text('Excluir tarefa', style: TextStyle(color: Colors.white)),
+        content: const Text('Tem certeza que deseja excluir esta tarefa?',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await _taskService.deleteTask(_userId, widget.task!.id!);
+      if (mounted) Navigator.pop(context, 'delete');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao excluir tarefa: $e'),
+            backgroundColor: const Color(0xFFFF4757),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -115,17 +176,15 @@ class _TaskFormPageState extends State<TaskFormPage> {
       initialDate: _dueDate,
       firstDate: DateTime(2024),
       lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF6C63FF),
-              surface: Color(0xFF0F1733),
-            ),
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF6C63FF),
+            surface: Color(0xFF0F1733),
           ),
-          child: child!,
-        );
-      },
+        ),
+        child: child!,
+      ),
     );
     if (picked != null) setState(() => _dueDate = picked);
   }
@@ -134,55 +193,24 @@ class _TaskFormPageState extends State<TaskFormPage> {
     final picked = await showTimePicker(
       context: context,
       initialTime: _dueTime,
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF6C63FF),
-              surface: Color(0xFF0F1733),
-            ),
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF6C63FF),
+            surface: Color(0xFF0F1733),
           ),
-          child: child!,
-        );
-      },
+        ),
+        child: child!,
+      ),
     );
     if (picked != null) setState(() => _dueTime = picked);
   }
 
-  void _confirmDelete() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0F1733),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Excluir tarefa', style: TextStyle(color: Colors.white)),
-        content: const Text('Tem certeza que deseja excluir esta tarefa?', style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () {
-              // TODO: integrar com backend — DELETE /tasks/:id
-              _mock.tasks.removeWhere((t) => t.id == widget.task!.id);
-              Navigator.pop(context);
-              Navigator.pop(context, 'delete');
-            },
-            child: const Text('Excluir', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
-  }
+  String _formatDate(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-  }
-
-  String _formatTime(TimeOfDay time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
+  String _formatTime(TimeOfDay time) =>
+      '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -237,7 +265,8 @@ class _TaskFormPageState extends State<TaskFormPage> {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: isActive ? color.withOpacity(0.2) : const Color(0xFF0F1733),
+                color:
+                    isActive ? color.withOpacity(0.2) : const Color(0xFF0F1733),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isActive ? color : Colors.white12,
@@ -314,7 +343,6 @@ class _TaskFormPageState extends State<TaskFormPage> {
       backgroundColor: const Color(0xFF060B1A),
       body: Column(
         children: [
-          // Header gradient
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
@@ -324,9 +352,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.vertical(
-                bottom: Radius.circular(30),
-              ),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,13 +361,15 @@ class _TaskFormPageState extends State<TaskFormPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed:
+                          _isSaving ? null : () => Navigator.pop(context),
                       icon: const Icon(Icons.arrow_back, color: Colors.white),
                     ),
                     if (_isEditing)
                       IconButton(
-                        onPressed: _confirmDelete,
-                        icon: const Icon(Icons.delete_outline, color: Colors.white),
+                        onPressed: _isSaving ? null : _confirmDelete,
+                        icon: const Icon(Icons.delete_outline,
+                            color: Colors.white),
                       ),
                   ],
                 ),
@@ -364,8 +392,6 @@ class _TaskFormPageState extends State<TaskFormPage> {
               ],
             ),
           ),
-
-          // Form
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
@@ -385,15 +411,18 @@ class _TaskFormPageState extends State<TaskFormPage> {
                     maxLines: 3,
                   ),
                   const SizedBox(height: 20),
-                  const Text('Prioridade', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  const Text('Prioridade',
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 10),
                   _buildPrioritySelector(),
                   const SizedBox(height: 20),
-                  const Text('Grupo', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  const Text('Grupo',
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 10),
                   _buildGroupSelector(),
                   const SizedBox(height: 20),
-                  const Text('Data e hora', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  const Text('Data e hora',
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -408,9 +437,12 @@ class _TaskFormPageState extends State<TaskFormPage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.calendar_today, color: Colors.white38, size: 20),
+                                const Icon(Icons.calendar_today,
+                                    color: Colors.white38, size: 20),
                                 const SizedBox(width: 10),
-                                Text(_formatDate(_dueDate), style: const TextStyle(color: Colors.white)),
+                                Text(_formatDate(_dueDate),
+                                    style:
+                                        const TextStyle(color: Colors.white)),
                               ],
                             ),
                           ),
@@ -428,9 +460,12 @@ class _TaskFormPageState extends State<TaskFormPage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.access_time, color: Colors.white38, size: 20),
+                                const Icon(Icons.access_time,
+                                    color: Colors.white38, size: 20),
                                 const SizedBox(width: 10),
-                                Text(_formatTime(_dueTime), style: const TextStyle(color: Colors.white)),
+                                Text(_formatTime(_dueTime),
+                                    style:
+                                        const TextStyle(color: Colors.white)),
                               ],
                             ),
                           ),
@@ -442,25 +477,44 @@ class _TaskFormPageState extends State<TaskFormPage> {
                   SizedBox(
                     width: double.infinity,
                     child: InkWell(
-                      onTap: _save,
+                      onTap: _isSaving ? null : _save,
                       borderRadius: BorderRadius.circular(16),
                       child: Ink(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF8F7BFF), Color(0xFF6C63FF)],
+                          gradient: LinearGradient(
+                            colors: _isSaving
+                                ? [
+                                    const Color(0xFF555555),
+                                    const Color(0xFF333333)
+                                  ]
+                                : [
+                                    const Color(0xFF8F7BFF),
+                                    const Color(0xFF6C63FF)
+                                  ],
                           ),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Center(
-                          child: Text(
-                            _isEditing ? 'Salvar alterações' : 'Criar tarefa',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
+                          child: _isSaving
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  _isEditing
+                                      ? 'Salvar alterações'
+                                      : 'Criar tarefa',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
                         ),
                       ),
                     ),
