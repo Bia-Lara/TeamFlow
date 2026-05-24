@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:team_flow/core/backend/service/GroupService.dart';
+import 'package:team_flow/core/backend/service/userService.dart';
 import '../../data/group.entity.dart';
-import '../../../../core/data/mock_data.dart';
 import '../../../profile/data/user.entity.dart';
 
 class AddMembersPage extends StatefulWidget {
@@ -13,8 +14,19 @@ class AddMembersPage extends StatefulWidget {
 }
 
 class _AddMembersPageState extends State<AddMembersPage> {
-  final _mock = MockData();
+  final UserService _userService = UserService();
+  final GroupService _groupService = GroupService();
   final _controller = TextEditingController();
+
+  // Guarda os objetos de Usuário reais carregados do backend
+  List<User> _currentMembers = [];
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGroupMembers();
+  }
 
   @override
   void dispose() {
@@ -22,37 +34,77 @@ class _AddMembersPageState extends State<AddMembersPage> {
     super.dispose();
   }
 
-  void _addMember() {
+  /// Busca os dados completos de cada usuário que está no grupo
+  Future<void> _loadGroupMembers() async {
+    if (widget.group.memberIds == null || widget.group.memberIds!.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      List<User> loadedUsers = [];
+      for (String id in widget.group.memberIds!) {
+        final user = await _userService.userRepository.getById(id);
+        loadedUsers.add(user);
+      }
+      if (mounted) {
+        setState(() {
+          _currentMembers = loadedUsers;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Erro ao carregar membros: ${e.toString().replaceAll("Exception: ", "")}', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _addMember() async {
     final email = _controller.text.trim();
     if (email.isEmpty) {
       _showSnackBar('Digite um e-mail', isError: true);
       return;
     }
 
-    // Verifica se o usuário existe
-    final user = _mock.allUsers.firstWhere(
-      (u) => u.email == email,
-      orElse: () => User(),
-    );
+    setState(() => _isLoading = true);
 
-    if (user.id == null) {
-      _showSnackBar('Usuário não encontrado', isError: true);
-      return;
+    try {
+      // 1. Busca o usuário usando APENAS o método criado na UserService
+      final user = await _userService.getUserByEmail(email);
+
+      if (user.id == null) {
+        _showSnackBar('Usuário inválido', isError: true);
+        return;
+      }
+
+      // 2. Verifica se o ID retornado já está na lista local do widget
+      if (widget.group.memberIds?.contains(user.id) ?? false) {
+        _showSnackBar('${user.name} já é membro deste grupo', isError: true);
+        return;
+      }
+
+      // 3. Adiciona o membro usando APENAS a GroupService
+      await _groupService.addMemberToGroup(widget.group.id!, user.id!);
+
+      // 4. Atualiza o estado da UI refletindo a mudança em tempo real
+      if (mounted) {
+        widget.group.memberIds ??= [];
+        widget.group.memberIds!.add(user.id!);
+
+        setState(() {
+          _currentMembers.add(user);
+        });
+
+        _controller.clear();
+        _showSnackBar('${user.name} adicionado ao grupo', isError: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar(e.toString().replaceAll("Exception: ", ""), isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    // Verifica se já é membro
-    if (widget.group.memberIds?.contains(user.id) ?? false) {
-      _showSnackBar('${user.name} já é membro deste grupo', isError: true);
-      return;
-    }
-
-    // TODO: integrar com backend — POST /groups/:id/members
-    setState(() {
-      _mock.addMemberToGroupByEmail(widget.group.id!, email);
-    });
-
-    _controller.clear();
-    _showSnackBar('${user.name} adicionado ao grupo', isError: false);
   }
 
   void _showSnackBar(String message, {required bool isError}) {
@@ -67,8 +119,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
 
   @override
   Widget build(BuildContext context) {
-    final currentMembers = _mock.getMembersOfGroup(widget.group.id!);
-
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
       body: Column(
@@ -111,7 +161,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${currentMembers.length} membros atualmente',
+                  '${_currentMembers.length} membros atualmente',
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],
@@ -161,6 +211,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
                           ),
                           child: TextField(
                             controller: _controller,
+                            enabled: !_isLoading,
                             style: const TextStyle(color: Colors.white),
                             keyboardType: TextInputType.emailAddress,
                             decoration: const InputDecoration(
@@ -176,24 +227,35 @@ class _AddMembersPageState extends State<AddMembersPage> {
                         SizedBox(
                           width: double.infinity,
                           child: InkWell(
-                            onTap: _addMember,
+                            onTap: _isLoading ? null : _addMember,
                             borderRadius: BorderRadius.circular(16),
                             child: Ink(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF8F7BFF), Color(0xFF6C63FF)],
+                                gradient: LinearGradient(
+                                  colors: _isLoading
+                                      ? [Colors.grey, Colors.grey]
+                                      : [const Color(0xFF8F7BFF), const Color(0xFF6C63FF)],
                                 ),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Center(
-                                child: Text(
-                                  "Adicionar membro",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                              child: Center(
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        "Adicionar membro",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                               ),
                             ),
                           ),
@@ -206,7 +268,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
 
                   // Current members
                   Text(
-                    "Membros atuais (${currentMembers.length})",
+                    "Membros atuais (${_currentMembers.length})",
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -215,7 +277,15 @@ class _AddMembersPageState extends State<AddMembersPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  ...currentMembers.map((user) => _memberChip(user)),
+                  if (_isLoading && _currentMembers.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+                      ),
+                    )
+                  else
+                    ..._currentMembers.map((user) => _memberChip(user)),
                 ],
               ),
             ),
@@ -228,7 +298,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
   Widget _memberChip(User user) {
     String getInitials(String name) {
       final parts = name.trim().split(' ');
-      if (parts.isEmpty) return '';
+      if (parts.isEmpty || parts[0].isEmpty) return '?';
       if (parts.length == 1) return parts[0][0].toUpperCase();
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }

@@ -10,6 +10,16 @@ class UserService {
 
   UserService();
 
+Future<User> getUserByEmail(String email) async {
+  final emailClean = email.trim().toLowerCase();
+  if (emailClean.isEmpty) throw Exception("O e-mail não pode ser vazio");
+
+  final usersFound = await userRepository.getByStringColumn("email", emailClean);
+  if (usersFound.isEmpty) throw Exception("Usuário não encontrado");
+
+  return usersFound.first;
+}
+
   Future<User> register(User user) async {
     String? email = user.email?.toLowerCase();
     if (user.email == null) throw Exception("Valor inválido para o campo: Email");

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:team_flow/core/backend/service/GroupService.dart'; // Import do seu GroupService
 import '../../data/group.entity.dart';
 import '../widgets/group_list_card.dart';
 import 'group_detail_page.dart';
-import '../../../../core/data/mock_data.dart';
 import '../../../auth/data/user_session.dart';
 
 class GroupsPage extends StatefulWidget {
@@ -13,9 +13,21 @@ class GroupsPage extends StatefulWidget {
 }
 
 class _GroupsPageState extends State<GroupsPage> {
-  final _mock = MockData();
+  final GroupService _groupService = GroupService();
   final _searchController = TextEditingController();
+  
+  List<Group> _allGroups = [];       // Guarda a lista completa vinda do Firebase
+  List<Group> _filteredGroups = [];  // Guarda o resultado filtrado pela barra de busca
+  bool _isLoading = false;
   String _searchQuery = '';
+
+  String get _userId => UserSession().currentUser?.id ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchGroups();
+  }
 
   @override
   void dispose() {
@@ -23,20 +35,48 @@ class _GroupsPageState extends State<GroupsPage> {
     super.dispose();
   }
 
-  List<Group> get _filteredGroups {
-    final user = UserSession().currentUser ?? _mock.currentUser;
-    final userGroups = _mock.getGroupsForUser(user.id!);
-    if (_searchQuery.isEmpty) return userGroups;
-    final q = _searchQuery.toLowerCase();
-    return userGroups
-        .where((g) => (g.name?.toLowerCase().contains(q) ?? false))
-        .toList();
+  /// Busca todos os grupos do usuário no Firestore de forma assíncrona
+  Future<void> _fetchGroups() async {
+    if (_userId.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final groups = await _groupService.getGroupsByUser(_userId);
+      if (mounted) {
+        setState(() {
+          _allGroups = groups;
+          _applyFilter(_searchQuery); // Garante que se houver texto, ele filtre na hora
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao carregar grupos: ${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: const Color(0xFFFF4757),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Filtra a lista local em memória de forma instantânea ao digitar
+  void _applyFilter(String query) {
+    _searchQuery = query;
+    if (query.isEmpty) {
+      _filteredGroups = List.from(_allGroups);
+    } else {
+      final q = query.toLowerCase();
+      _filteredGroups = _allGroups
+          .where((g) => (g.name?.toLowerCase().contains(q) ?? false))
+          .toList();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final groups = _filteredGroups;
-
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
       body: SafeArea(
@@ -54,6 +94,7 @@ class _GroupsPageState extends State<GroupsPage> {
                 ),
               ),
               const SizedBox(height: 20),
+              
               // Search bar
               Container(
                 decoration: BoxDecoration(
@@ -64,7 +105,9 @@ class _GroupsPageState extends State<GroupsPage> {
                   controller: _searchController,
                   style: const TextStyle(color: Colors.white),
                   onChanged: (value) {
-                    setState(() => _searchQuery = value);
+                    setState(() {
+                      _applyFilter(value);
+                    });
                   },
                   decoration: InputDecoration(
                     hintText: "Buscar grupos...",
@@ -74,10 +117,11 @@ class _GroupsPageState extends State<GroupsPage> {
                         ? IconButton(
                             onPressed: () {
                               _searchController.clear();
-                              setState(() => _searchQuery = '');
+                              setState(() {
+                                _applyFilter('');
+                              });
                             },
-                            icon:
-                                const Icon(Icons.close, color: Colors.white38),
+                            icon: const Icon(Icons.close, color: Colors.white38),
                           )
                         : null,
                     border: InputBorder.none,
@@ -87,33 +131,40 @@ class _GroupsPageState extends State<GroupsPage> {
               ),
               const SizedBox(height: 20),
 
+              // Conteúdo da Listagem / Loading
               Expanded(
-                child: groups.isEmpty
+                child: _isLoading && _allGroups.isEmpty
                     ? const Center(
-                        child: Text(
-                          'Nenhum grupo encontrado',
-                          style: TextStyle(color: Colors.white54),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF6C63FF),
                         ),
                       )
-                    : ListView.builder(
-                        itemCount: groups.length,
-                        itemBuilder: (context, index) {
-                          final group = groups[index];
-                          return GroupListCard(
-                            group: group,
-                            onTap: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => GroupDetailPage(group: group),
-                                ),
+                    : _filteredGroups.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'Nenhum grupo encontrado',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _filteredGroups.length,
+                            itemBuilder: (context, index) {
+                              final group = _filteredGroups[index];
+                              return GroupListCard(
+                                group: group,
+                                onTap: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => GroupDetailPage(group: group),
+                                    ),
+                                  );
+                                  // Atualiza os dados da listagem se houveram modificações
+                                  _fetchGroups();
+                                },
                               );
-                              // Refresh ao voltar
-                              setState(() {});
                             },
-                          );
-                        },
-                      ),
+                          ),
               ),
             ],
           ),

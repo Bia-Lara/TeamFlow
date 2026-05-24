@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:team_flow/core/backend/service/GroupService.dart'; // Importando seu GroupService
 import '../widgets/header_widget.dart';
 import '../widgets/stat_card_widget.dart';
 import '../widgets/group_card_widget.dart';
@@ -6,9 +7,9 @@ import '../../../tasks/domain/task.dart';
 import '../../../tasks/presentation/widgets/task_list_card.dart';
 import '../../../tasks/data/task_service.dart';
 import '../../../groups/data/group.entity.dart';
-import '../../../../core/data/mock_data.dart';
 import '../../../../core/notifications/tab_change_notification.dart';
 import '../../../auth/data/user_session.dart';
+import '../../../groups/presentation/pages/group_detail_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,10 +19,46 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final _mock = MockData();
   final _taskService = TaskService();
+  final _groupService = GroupService(); // Instanciando seu GroupService real
 
-  String get _userId => UserSession().currentUser?.id ?? _mock.currentUser.id!;
+  List<Group> _groups = [];
+  bool _isLoadingGroups = false;
+
+  // Força o ID vindo estritamente da sessão do usuário conectado
+  String get _userId => UserSession().currentUser?.id ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserGroups();
+  }
+
+  /// Busca os grupos/casas reais do usuário logado no Firestore
+  Future<void> _loadUserGroups() async {
+    if (_userId.isEmpty) return;
+    
+    setState(() => _isLoadingGroups = true);
+    try {
+      final userGroups = await _groupService.getGroupsByUser(_userId);
+      if (mounted) {
+        setState(() {
+          _groups = userGroups;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao carregar grupos: ${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: const Color(0xFFFF4757),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingGroups = false);
+    }
+  }
 
   void _goToTab(int index) {
     TabChangeNotification(index).dispatch(context);
@@ -57,9 +94,6 @@ class _HomePageState extends State<HomePage> {
     LinearGradient(colors: [Color(0xFFFF6B6B), Color(0xFFEE5A24)]),
   ];
 
-  // Grupos ainda vêm do mock — migre quando tiver GroupService
-  List<Group> get _groups => _mock.getGroupsForUser(_userId);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -79,7 +113,6 @@ class _HomePageState extends State<HomePage> {
             }
 
             final tasks = snapshot.data ?? [];
-            final groups = _groups;
             final pendingCount = tasks.where((t) => !t.isCompleted).length;
 
             final displayTasks = List<Task>.from(tasks)
@@ -92,8 +125,7 @@ class _HomePageState extends State<HomePage> {
               });
             final recentTasks = displayTasks.take(5).toList();
 
-            final isLoading =
-                snapshot.connectionState == ConnectionState.waiting;
+            final isLoadingTasks = snapshot.connectionState == ConnectionState.waiting;
 
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -102,12 +134,14 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 20),
                   const HeaderWidget(),
                   const SizedBox(height: 30),
+                  
+                  // Bloco de Estatísticas
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       StatCardWidget(
                         title: "Tarefas",
-                        value: isLoading ? '...' : tasks.length.toString(),
+                        value: isLoadingTasks ? '...' : tasks.length.toString(),
                         icon: Icons.check_box_outlined,
                         gradient: const LinearGradient(
                           colors: [Color(0xFF4E3BFF), Color(0xFF2A2C7C)],
@@ -115,7 +149,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       StatCardWidget(
                         title: "Pendentes",
-                        value: isLoading ? '...' : pendingCount.toString(),
+                        value: isLoadingTasks ? '...' : pendingCount.toString(),
                         icon: Icons.access_time,
                         gradient: const LinearGradient(
                           colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
@@ -124,6 +158,8 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   const SizedBox(height: 30),
+                  
+                  // Seção Meus Grupos
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -145,25 +181,57 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                  
+                  // Listagem Horizontal de Grupos
                   SizedBox(
                     height: 130,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: groups.length,
-                      itemBuilder: (context, index) {
-                        final group = groups[index];
-                        final memberCount = group.memberIds?.length ?? 0;
-                        final gradient =
-                            _groupGradients[index % _groupGradients.length];
-                        return GroupCardWidget(
-                          title: group.name ?? '',
-                          members: '$memberCount membros',
-                          gradient: gradient,
-                        );
-                      },
-                    ),
+                    child: _isLoadingGroups
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF6C63FF),
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : _groups.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  'Você não participa de nenhuma casa.',
+                                  style: TextStyle(color: Colors.white38, fontSize: 13),
+                                ),
+                              )
+                            : ListView.builder(
+  scrollDirection: Axis.horizontal,
+  itemCount: _groups.length,
+  itemBuilder: (context, index) {
+    final group = _groups[index];
+    final memberCount = group.memberIds?.length ?? 0;
+    final gradient = _groupGradients[index % _groupGradients.length];
+    
+    return GestureDetector(
+      onTap: () async {
+        // Redireciona para a tela de detalhes enviando o grupo selecionado
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GroupDetailPage(group: group),
+          ),
+        );
+        // Quando você voltar da tela de detalhes, recarrega os grupos 
+        // caso algum membro tenha sido adicionado ou removido por lá
+        _loadUserGroups();
+      },
+      child: GroupCardWidget(
+        title: group.name ?? '',
+        members: '$memberCount membros',
+        gradient: gradient,
+      ),
+    );
+  },
+) ,
                   ),
                   const SizedBox(height: 30),
+                  
+                  // Seção Tarefas Recentes
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -185,7 +253,9 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  if (isLoading)
+                  
+                  // Listagem de Tarefas Recentes
+                  if (isLoadingTasks)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.only(top: 20),
