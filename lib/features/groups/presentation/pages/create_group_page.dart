@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../data/group.entity.dart';
-import '../../../../core/data/mock_data.dart';
 import '../../../../core/backend/service/GroupService.dart';
 import '../../../auth/data/user_session.dart';
 
@@ -43,14 +41,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       final currentUserId = UserSession().currentUser?.id;
       if (currentUserId == null) throw Exception("Sessão expirada. Faça login novamente.");
 
-      final groupPayload = Group(
-        name: name,
-        description: desc,
-        memberIds: [currentUserId],
-      );
-
       // Envia para o Firebase através do service
-      final createdGroup = await _groupService.createGroup(groupPayload);
+      final createdGroup = await _groupService.createGroup(name, desc, currentUserId);
 
       if (!mounted) return;
 
