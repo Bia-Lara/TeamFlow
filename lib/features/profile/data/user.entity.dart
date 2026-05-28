@@ -1,9 +1,12 @@
+import '../../tasks/data/task.entity.dart';
+
 class User {
   String? id;
   String? name;
   String? email;
   String? password;
   List<String>? groupIds;
+  List<TaskEntity>? tasks;
 
   User({
     this.id,
@@ -11,6 +14,7 @@ class User {
     this.email,
     this.password,
     this.groupIds,
+    this.tasks,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -22,6 +26,11 @@ class User {
       groupIds: json['groupIds'] != null
           ? List<String>.from(json['groupIds'])
           : null,
+      tasks: json['tasks'] != null
+          ? (json['tasks'] as List)
+              .map((taskJson) => TaskEntity.fromJson(taskJson as Map<String, dynamic>))
+              .toList()
+          : null,
     );
   }
 
@@ -32,6 +41,7 @@ class User {
       'email': email,
       'password': password,
       'groupIds': groupIds,
+      'tasks': tasks?.map((e) => e.toJson()).toList(),
     };
   }
 
@@ -41,6 +51,7 @@ class User {
     String? email,
     String? password,
     List<String>? groupIds,
+    List<TaskEntity>? tasks,
   }) {
     return User(
       id: id ?? this.id,
@@ -48,6 +59,7 @@ class User {
       email: email ?? this.email,
       password: password ?? this.password,
       groupIds: groupIds ?? this.groupIds,
+      tasks: tasks ?? this.tasks,
     );
   }
 }
