@@ -46,6 +46,7 @@ class FirebaseUserRepository implements Persistency<User, String> {
       'name': user.name,
       'password': user.password,
       'groupIds': user.groupIds ?? [],
+      'tasks': user.tasks?.map((e) => e.toJson()).toList() ?? []
     });
 
     return user;
