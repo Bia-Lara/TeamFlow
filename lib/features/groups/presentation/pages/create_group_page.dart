@@ -71,7 +71,9 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
-      body: Column(
+      resizeToAvoidBottomInset: true,
+      body: SingleChildScrollView(
+        child: Column(
         children: [
           // Header
           Container(
@@ -189,6 +191,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
