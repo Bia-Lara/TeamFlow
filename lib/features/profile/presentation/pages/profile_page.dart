@@ -4,10 +4,10 @@ import '../widgets/profile_avatar.dart';
 import '../widgets/profile_stats_card.dart';
 import '../widgets/profile_menu_item.dart';
 import 'edit_profile_page.dart';
-import '../../../../core/data/mock_data.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/data/user_session.dart';
 import '../../../../core/backend/service/taskService.dart';
+import '../../../../core/backend/service/GroupService.dart';
 import '../../../tasks/domain/task.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -18,8 +18,10 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final _mock = MockData();
   final _taskService = TaskService();
+  final _groupService = GroupService();
+
+  int _groupCount = 0;
 
   User get _user {
     final sessionUser = UserSession().currentUser;
@@ -29,7 +31,22 @@ class _ProfilePageState extends State<ProfilePage> {
     return sessionUser;
   }
 
-  int get _groupCount => _mock.getGroupsForUser(_user.id!).length;
+  @override
+  void initState() {
+    super.initState();
+    _loadGroupCount();
+  }
+
+  Future<void> _loadGroupCount() async {
+    try {
+      final groups = await _groupService.getGroupsByUser(_user.id!);
+      if (mounted) {
+        setState(() => _groupCount = groups.length);
+      }
+    } catch (_) {
+      // mantém 0 em caso de erro
+    }
+  }
 
   void _openEditProfile() async {
     final result = await Navigator.push<User>(
@@ -39,9 +56,6 @@ class _ProfilePageState extends State<ProfilePage> {
     if (result != null) {
       setState(() {
         UserSession().setCurrentUser(result);
-        _mock.currentUser = result;
-        final idx = _mock.allUsers.indexWhere((u) => u.id == result.id);
-        if (idx != -1) _mock.allUsers[idx] = result;
       });
     }
   }

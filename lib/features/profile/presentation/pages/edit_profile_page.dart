@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../data/user.entity.dart';
-import '../../../auth/data/auth_service.dart';
 import '../widgets/profile_avatar.dart';
 import '../../../../core/backend/persistence/firebase/FirebaseUserRepository.dart';
 
@@ -67,10 +66,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
     setState(() => _isLoading = true);
 
     try {
-      final updatedUser = widget.user.copyWith(
+      // Busca o usuário completo do Firebase para não perder nenhum campo
+      final freshUser = await _userRepo.getById(widget.user.id!);
+
+      final updatedUser = freshUser.copyWith(
         name: name,
         email: email,
-        // Note: password update requires separate endpoint in future
       );
 
       await _userRepo.update(updatedUser);
