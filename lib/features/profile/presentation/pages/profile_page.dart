@@ -7,7 +7,7 @@ import 'edit_profile_page.dart';
 import '../../../../core/data/mock_data.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/data/user_session.dart';
-import '../../../tasks/data/task_service.dart';
+import '../../../../core/backend/service/taskService.dart';
 import '../../../tasks/domain/task.dart';
 
 class ProfilePage extends StatefulWidget {

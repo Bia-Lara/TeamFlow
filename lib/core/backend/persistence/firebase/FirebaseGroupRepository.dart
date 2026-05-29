@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:team_flow/features/tasks/domain/task.dart';
 import '../../Persistency.dart';
 import '../../../../features/groups/data/group.entity.dart'; // Ajuste o path se necessário
 
@@ -7,6 +8,9 @@ class FirebaseGroupRepository implements Persistency<Group, String> {
   static final FirebaseGroupRepository instance = FirebaseGroupRepository._internal();
   
   final CollectionReference _groupsColl = FirebaseFirestore.instance.collection('groups');
+
+  CollectionReference get groupsCollection => _groupsColl;
+
 
   @override
   Future<void> delete(String key) async {
@@ -18,7 +22,6 @@ class FirebaseGroupRepository implements Persistency<Group, String> {
     final doc = await _groupsColl.doc(key).get();
     if (!doc.exists) throw Exception('Grupo/Casa não encontrado: $key');
     
-    // Como você não usa um fromJson estático, instanciamos e populamos com os dados do Firestore
     var data = doc.data() as Map<String, dynamic>;
     return Group(
       id: data['id'],
@@ -51,6 +54,7 @@ class FirebaseGroupRepository implements Persistency<Group, String> {
       'name': group.name,
       'description': group.description,
       'memberIds': group.memberIds ?? [],
+      'tasks': group.tasks?.map((e) => e.toJson()).toList() ?? [],
     });
 
     return group;
@@ -60,20 +64,27 @@ class FirebaseGroupRepository implements Persistency<Group, String> {
   Future<List<Group>> getByStringColumn(String columnName, String? value) async {
     if (value == null) throw Exception('Valor não deve ser nulo!');
 
-    var snapshot = await _groupsColl.where(columnName, isEqualTo: value).get();
+    Query query = _groupsColl;
+
+    if (columnName == 'memberIds') {
+      query = query.where(columnName, arrayContains: value);
+    } else {
+      query = query.where(columnName, isEqualTo: value);
+    }
+
+    var snapshot = await query.get();
 
     return snapshot.docs.map((doc) {
       var data = doc.data() as Map<String, dynamic>;
-      return Group(
-        id: data['id'],
-        name: data['name'],
-        description: data['description'],
-        memberIds: List<String>.from(data['memberIds'] ?? []),
-      );
+      
+      if (data['id'] == null) {
+        data['id'] = doc.id;
+      }
+      
+      return Group.fromJson(data);
     }).toList();
   }
 
-  /// Busca todos os grupos onde a lista 'memberIds' do Firestore contém o ID do usuário
   Future<List<Group>> getByMemberId(String userId) async {
     var snapshot = await _groupsColl.where('memberIds', arrayContains: userId).get();
 
@@ -84,6 +95,9 @@ class FirebaseGroupRepository implements Persistency<Group, String> {
         name: data['name'],
         description: data['description'],
         memberIds: List<String>.from(data['memberIds'] ?? []),
+        tasks: (data['tasks'] as List?)
+            ?.map((e) => Task.fromJson(e as Map<String, dynamic>))
+            .toList() ?? [],
       );
     }).toList();
   }

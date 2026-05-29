@@ -5,7 +5,7 @@ import '../widgets/stat_card_widget.dart';
 import '../widgets/group_card_widget.dart';
 import '../../../tasks/domain/task.dart';
 import '../../../tasks/presentation/widgets/task_list_card.dart';
-import '../../../tasks/data/task_service.dart';
+import '../../../../core/backend/service/taskService.dart';
 import '../../../groups/data/group.entity.dart';
 import '../../../../core/notifications/tab_change_notification.dart';
 import '../../../auth/data/user_session.dart';
@@ -66,14 +66,9 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _toggleTask(Task task) async {
     try {
-      if (task.isCompleted) {
-        await _taskService.updateTask(
-          task.copyWith(isCompleted: false),
-          _userId,
-        );
-      } else {
-        await _taskService.completeTask(_userId, task.id!);
-      }
+    final updatedStatus = !task.isCompleted;
+    
+    await _taskService.updateTask(task.copyWith(isCompleted: updatedStatus), _userId,);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

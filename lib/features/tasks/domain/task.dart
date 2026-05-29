@@ -21,7 +21,7 @@ class Task {
     this.dueDate,
     this.priority = TaskPriority.media,
     this.isCompleted = false,
-  });
+  }) ;
 
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(

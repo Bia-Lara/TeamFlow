@@ -9,6 +9,8 @@ class FirebaseUserRepository implements Persistency<User, String> {
   CollectionReference _usersColl =
       FirebaseFirestore.instance.collection('users');
 
+  CollectionReference get usersCollection => _usersColl;
+
   @override
   Future<void> delete(String key) async {
     await _usersColl.doc(key).delete();

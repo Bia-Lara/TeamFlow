@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:team_flow/core/backend/service/GroupService.dart';
 import 'package:team_flow/core/backend/service/userService.dart';
+import 'package:team_flow/core/backend/service/taskService.dart'; // Import do seu TaskService
 import '../../../auth/data/user_session.dart';
 import '../../data/group.entity.dart';
 import 'add_members_page.dart';
@@ -22,9 +23,9 @@ class GroupDetailPage extends StatefulWidget {
 class _GroupDetailPageState extends State<GroupDetailPage> {
   final UserService _userService = UserService();
   final GroupService _groupService = GroupService();
+  final TaskService _taskService = TaskService(); // Instanciando o Service de tarefas
 
   List<User> _members = [];
-  List<Task> _groupTasks = []; // Prontinho para quando você criar o seu TaskService
   bool _isLoading = false;
 
   String get _userId => UserSession().currentUser?.id ?? '';
@@ -35,7 +36,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     _loadData();
   }
 
-  /// Busca os usuários reais correspondentes aos IDs contidos na entidade Group
+  /// Busca apenas os usuários reais correspondentes aos IDs contidos na entidade Group
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
@@ -50,9 +51,6 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         _members = [];
       }
 
-      // TODO: Buscar tarefas reais do Firebase quando implementar o seu TaskService
-      _groupTasks = [];
-
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
@@ -65,11 +63,9 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
 
   void _removeMember(User user) async {
     final isSelf = user.id == _userId;
-
     setState(() => _isLoading = true);
 
     try {
-      // 1. Cria uma lista nova no Firestore removendo o ID do usuário selecionado
       List<String> updatedMembers = List<String>.from(widget.group.memberIds ?? []);
       updatedMembers.remove(user.id);
 
@@ -77,19 +73,18 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         widget.group.copyWith(memberIds: updatedMembers),
       );
 
-      // 2. Sincroniza localmente o objeto recebido por parâmetro
       widget.group.memberIds?.remove(user.id);
 
       if (isSelf) {
         if (mounted) {
           _showSnackBar('Você saiu do grupo');
-          Navigator.pop(context); // Volta para a tela anterior
+          Navigator.pop(context);
         }
         return;
       }
 
       _showSnackBar('${user.name} removido do grupo');
-      _loadData(); // Atualiza a lista da tela
+      _loadData();
     } catch (e) {
       if (mounted) {
         _showSnackBar('Erro ao remover membro: ${e.toString().replaceAll("Exception: ", "")}');
@@ -100,21 +95,23 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   }
 
   void _openEditTask(Task task) async {
-    final result = await Navigator.push(
+    // Abre o formulário enviando a tarefa clicada para o modo de edição
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => TaskFormPage(task: task)),
     );
-    if (result == null) return;
-    
-    // TODO: plugar interações de tarefas no Firebase via service futuramente
-    _loadData();
+    // Como estamos usando StreamBuilder para as tarefas, não é mais necessário chamar o _loadData() aqui!
+    // O banco atualiza e a tela escuta a mudança sozinha.
   }
 
-  void _toggleTask(Task task) {
-    // TODO: persistir alteração da tarefa no Firebase
-    setState(() {
-      task.isCompleted = !task.isCompleted;
-    });
+  void _toggleTask(Task task) async {
+    try {
+      // Inverte o estado de conclusão e atualiza usando a lógica centralizada do seu updateTask
+      final updatedTask = task.copyWith(isCompleted: !task.isCompleted);
+      await _taskService.updateTask(updatedTask, _userId);
+    } catch (e) {
+      _showSnackBar('Erro ao atualizar tarefa: $e');
+    }
   }
 
   void _showSnackBar(String message) {
@@ -128,196 +125,193 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final completedCount = _groupTasks.where((t) => t.isCompleted).length;
-    final progress = _groupTasks.isNotEmpty
-        ? ((completedCount / _groupTasks.length) * 100).round()
-        : 0;
-
     return Scaffold(
       backgroundColor: const Color(0xFF060B1A),
       body: _isLoading && _members.isEmpty
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF6C63FF)))
-          : SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Header gradient
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF6C63FF), Color(0xFF3B3B98)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.vertical(
-                        bottom: Radius.circular(30),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          : StreamBuilder<List<Task>>(
+              // 1. Injetamos o stream de tarefas do grupo que criamos no TaskService
+              stream: _taskService.streamGroupTasks(widget.group.id ?? ''),
+              builder: (context, snapshot) {
+                final groupTasks = snapshot.data ?? [];
+                
+                // 2. Cálculo dinâmico do progresso baseado no Stream em tempo real
+                final completedCount = groupTasks.where((t) => t.isCompleted).length;
+                final progress = groupTasks.isNotEmpty
+                    ? ((completedCount / groupTasks.length) * 100).round()
+                    : 0;
+
+                return SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // Header gradient
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF6C63FF), Color(0xFF3B3B98)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.arrow_back, color: Colors.white),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                IconButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                                ),
+                                IconButton(
+                                  onPressed: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => AddMembersPage(group: widget.group)),
+                                    );
+                                    _loadData();
+                                  },
+                                  icon: const Icon(Icons.group_add, color: Colors.white),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              onPressed: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => AddMembersPage(group: widget.group),
-                                  ),
-                                );
-                                _loadData(); // Sincroniza ao voltar da tela de adicionar
-                              },
-                              icon: const Icon(Icons.group_add, color: Colors.white),
+                            const SizedBox(height: 20),
+                            Text(
+                              widget.group.name ?? "",
+                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              widget.group.description ?? "",
+                              style: const TextStyle(color: Colors.white70),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 20),
-                        Text(
-                          widget.group.name ?? "",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          widget.group.description ?? "",
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Stats (Exibindo os valores dinâmicos reais)
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F1733),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _statItem("Membros", _members.length.toString()),
-                        _divider(),
-                        _statItem("Tarefas", _groupTasks.length.toString()),
-                        _divider(),
-                        _statItem("Progresso", "$progress%"),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Tarefas do grupo
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Tarefas",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          "${_groupTasks.length} tarefas",
-                          style: const TextStyle(color: Colors.white54, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  if (_groupTasks.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      child: Text(
-                        'Nenhuma tarefa neste grupo',
-                        style: TextStyle(color: Colors.white38),
                       ),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: ListView.builder(
+
+                      const SizedBox(height: 20),
+
+                      // Stats container
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F1733),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _statItem("Membros", _members.length.toString()),
+                            _divider(),
+                            _statItem("Tarefas", groupTasks.length.toString()),
+                            _divider(),
+                            _statItem("Progresso", "$progress%"),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Seção de Cabeçalho das Tarefas
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              "Tarefas",
+                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              "${groupTasks.length} tarefas",
+                              style: const TextStyle(color: Colors.white54, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // 3. Renderização condicional da lista vinda do Stream
+                      if (snapshot.connectionState == ConnectionState.waiting && groupTasks.isEmpty)
+                        const Center(child: Padding(
+                          padding: EdgeInsets.all(10.0),
+                          child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+                        ))
+                      else if (groupTasks.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('Nenhuma tarefa neste grupo', style: TextStyle(color: Colors.white38)),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: groupTasks.length,
+                            itemBuilder: (context, index) {
+                              final task = groupTasks[index];
+                              return TaskListCard(
+                                task: task,
+                                onToggle: () => _toggleTask(task),
+                                onTap: () => _openEditTask(task),
+                              );
+                            },
+                          ),
+                        ),
+
+                      const SizedBox(height: 24),
+
+                      // Seção de Membros
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              "Membros",
+                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => AddMembersPage(group: widget.group)),
+                                );
+                                _loadData();
+                              },
+                              child: const Text("Adicionar"),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _groupTasks.length,
+                        itemCount: _members.length,
                         itemBuilder: (context, index) {
-                          final task = _groupTasks[index];
-                          return TaskListCard(
-                            task: task,
-                            onToggle: () => _toggleTask(task),
-                            onTap: () => _openEditTask(task),
+                          final user = _members[index];
+                          return MemberTile(
+                            user: user,
+                            onRemove: () => _removeMember(user),
                           );
                         },
                       ),
-                    ),
 
-                  const SizedBox(height: 24),
-
-                  // Membros
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Membros",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AddMembersPage(group: widget.group),
-                              ),
-                            );
-                            _loadData();
-                          },
-                          child: const Text("Adicionar"),
-                        ),
-                      ],
-                    ),
+                      const SizedBox(height: 30),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _members.length,
-                    itemBuilder: (context, index) {
-                      final user = _members[index];
-                      return MemberTile(
-                        user: user,
-                        onRemove: () => _removeMember(user),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 30),
-                ],
-              ),
+                );
+              },
             ),
     );
   }
@@ -327,26 +321,15 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
       children: [
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 4),
-        Text(
-          title,
-          style: const TextStyle(color: Colors.white54),
-        ),
+        Text(title, style: const TextStyle(color: Colors.white54)),
       ],
     );
   }
 
   Widget _divider() {
-    return Container(
-      height: 30,
-      width: 1,
-      color: Colors.white24,
-    );
+    return Container(height: 30, width: 1, color: Colors.white24);
   }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/task.dart';
-import '../../data/task_service.dart';
+import '../../../../core/backend/service/taskService.dart';
 import '../../../../core/data/mock_data.dart';
 import '../widgets/task_list_card.dart';
 import '../widgets/task_section_header.dart';
@@ -113,16 +113,9 @@ class _TasksPageState extends State<TasksPage> {
 
   Future<void> _toggleTask(Task task) async {
     try {
-      if (task.isCompleted) {
-        // Desmarca: usa updateTask
-        await _taskService.updateTask(
-          task.copyWith(isCompleted: false),
-          _userId,
-        );
-      } else {
-        // Marca como concluída
-        await _taskService.completeTask(_userId, task.id!);
-      }
+    final updatedStatus = !task.isCompleted;
+    
+    await _taskService.updateTask(task.copyWith(isCompleted: updatedStatus), _userId,);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

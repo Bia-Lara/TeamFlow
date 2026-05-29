@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:team_flow/features/groups/data/group.entity.dart';
+import 'package:uuid/uuid.dart';
 import '../../domain/task.dart';
-import '../../data/task_service.dart';
-import '../../../../core/data/mock_data.dart';
+import '../../../../core/backend/service/taskService.dart';
+import '../../../../core/backend/persistence/firebase/FirebaseGroupRepository.dart'; // 1. Import do repositório real
 import '../../../auth/data/user_session.dart';
 
 class TaskFormPage extends StatefulWidget {
@@ -14,43 +16,66 @@ class TaskFormPage extends StatefulWidget {
 }
 
 class _TaskFormPageState extends State<TaskFormPage> {
-  final _mock = MockData();
   final _taskService = TaskService();
+  // 2. Instanciando o repositório real de grupos através do padrão Singleton que você criou
+  final _groupRepository = FirebaseGroupRepository.instance; 
 
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   TaskPriority _priority = TaskPriority.media;
   DateTime _dueDate = DateTime.now();
   TimeOfDay _dueTime = TimeOfDay.now();
-  late String _selectedGroupId;
-  late List<_GroupOption> _groupOptions;
+  
+  String? _selectedGroupId; // Mudado para Nullable para controlar o estado inicial
+  List<_GroupOption> _groupOptions = [];
+  
   bool _isSaving = false;
+  late Future<List<Group>> _groupsFuture; // Armazena a requisição assíncrona dos grupos
 
   bool get _isEditing => widget.task != null;
 
-  String get _userId => UserSession().currentUser?.id ?? _mock.currentUser.id!;
+  // Busca o ID do usuário logado na sessão real do app
+  String get _userId => UserSession().currentUser?.id ?? '';
 
   @override
   void initState() {
     super.initState();
 
-    final userGroups = _mock.getGroupsForUser(_mock.currentUser.id!);
-    _groupOptions = userGroups
-        .map((g) => _GroupOption(id: g.id!, name: g.name ?? ''))
-        .toList();
+    // 3. Dispara a busca dos grupos reais vinculados ao usuário logado
+    _groupsFuture = _loadRealGroups();
 
     if (_isEditing) {
       final t = widget.task!;
       _titleController.text = t.title ?? '';
       _descController.text = t.description ?? '';
       _priority = t.priority;
-      _selectedGroupId = t.groupId ?? _groupOptions.first.id;
+      _selectedGroupId = t.groupId;
       if (t.dueDate != null) {
         _dueDate = t.dueDate!;
         _dueTime = TimeOfDay.fromDateTime(t.dueDate!);
       }
-    } else {
-      _selectedGroupId = _groupOptions.isNotEmpty ? _groupOptions.first.id : '';
+    }
+  }
+
+  // 4. Método auxiliar para buscar os grupos reais do Firebase
+  Future<List<Group>> _loadRealGroups() async {
+    try {
+      // Busca no Firebase filtrando os grupos onde o usuário atual é membro
+      final groups = await _groupRepository.getByStringColumn('memberIds', _userId);
+      
+      setState(() {
+        _groupOptions = groups
+            .map((g) => _GroupOption(id: g.id!, name: g.name ?? ''))
+            .toList();
+
+        // Se não for edição e houver grupos, pré-seleciona o primeiro da lista
+        if (!_isEditing && _groupOptions.isNotEmpty) {
+          _selectedGroupId = _groupOptions.first.id;
+        }
+      });
+      return groups;
+    } catch (e) {
+      rethrow;
     }
   }
 
@@ -72,12 +97,12 @@ class _TaskFormPageState extends State<TaskFormPage> {
   Future<void> _save() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Digite o título da tarefa'),
-          backgroundColor: Color(0xFFFF4757),
-        ),
-      );
+      _showSnackBar('Digite o título da tarefa');
+      return;
+    }
+
+    if (_selectedGroupId == null || _selectedGroupId!.isEmpty) {
+      _showSnackBar('Selecione um grupo para associar esta tarefa');
       return;
     }
 
@@ -93,34 +118,29 @@ class _TaskFormPageState extends State<TaskFormPage> {
       );
 
       final task = Task(
-        id: _isEditing ? widget.task!.id : null,
+        id: _isEditing ? widget.task!.id : const Uuid().v4(),
         userId: _userId,
         title: title,
         description: _descController.text.trim(),
-        groupId: _selectedGroupId,
+        groupId: _selectedGroupId, // ID selecionado dinamicamente do Dropdown
         groupName: _selectedGroupName,
         dueDate: dueDateTime,
         priority: _priority,
         isCompleted: _isEditing ? widget.task!.isCompleted : false,
       );
 
-      Task savedTask;
+      Task? savedTask;
       if (_isEditing) {
         savedTask = await _taskService.updateTask(task, _userId);
       } else {
-        savedTask = await _taskService.createTask(task, _userId);
+        // CORREÇÃO: Passando as propriedades corretas que o seu TaskService configurado exige
+        await _taskService.createTask(task, _selectedGroupId, _userId);
+        savedTask = task;
       }
 
       if (mounted) Navigator.pop(context, savedTask);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao salvar tarefa: $e'),
-            backgroundColor: const Color(0xFFFF4757),
-          ),
-        );
-      }
+      if (mounted) _showSnackBar('Erro ao salvar tarefa: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -132,10 +152,8 @@ class _TaskFormPageState extends State<TaskFormPage> {
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF0F1733),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:
-            const Text('Excluir tarefa', style: TextStyle(color: Colors.white)),
-        content: const Text('Tem certeza que deseja excluir esta tarefa?',
-            style: TextStyle(color: Colors.white70)),
+        title: const Text('Excluir tarefa', style: TextStyle(color: Colors.white)),
+        content: const Text('Tem certeza que deseja excluir esta tarefa?', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -143,8 +161,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir',
-                style: TextStyle(color: Colors.redAccent)),
+            child: const Text('Excluir', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -157,17 +174,19 @@ class _TaskFormPageState extends State<TaskFormPage> {
       await _taskService.deleteTask(_userId, widget.task!.id!);
       if (mounted) Navigator.pop(context, 'delete');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao excluir tarefa: $e'),
-            backgroundColor: const Color(0xFFFF4757),
-          ),
-        );
-      }
+      if (mounted) _showSnackBar('Erro ao excluir tarefa: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFFF4757),
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
@@ -265,8 +284,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color:
-                    isActive ? color.withOpacity(0.2) : const Color(0xFF0F1733),
+                color: isActive ? color.withOpacity(0.2) : const Color(0xFF0F1733),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isActive ? color : Colors.white12,
@@ -292,6 +310,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
   Widget _buildGroupSelector() {
     if (_groupOptions.isEmpty) {
       return Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFF0F1733),
@@ -343,6 +362,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
       backgroundColor: const Color(0xFF060B1A),
       body: Column(
         children: [
+          // Header Gradiente
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
@@ -361,15 +381,13 @@ class _TaskFormPageState extends State<TaskFormPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      onPressed:
-                          _isSaving ? null : () => Navigator.pop(context),
+                      onPressed: _isSaving ? null : () => Navigator.pop(context),
                       icon: const Icon(Icons.arrow_back, color: Colors.white),
                     ),
                     if (_isEditing)
                       IconButton(
                         onPressed: _isSaving ? null : _confirmDelete,
-                        icon: const Icon(Icons.delete_outline,
-                            color: Colors.white),
+                        icon: const Icon(Icons.delete_outline, color: Colors.white),
                       ),
                   ],
                 ),
@@ -384,143 +402,146 @@ class _TaskFormPageState extends State<TaskFormPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _isEditing
-                      ? 'Atualize os dados da tarefa'
-                      : 'Preencha os dados da tarefa',
+                  _isEditing ? 'Atualize os dados da tarefa' : 'Preencha os dados da tarefa',
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],
             ),
           ),
+          
+          // Corpo do Formulário envelopado no FutureBuilder
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTextField(
-                    controller: _titleController,
-                    hint: 'Título da tarefa',
-                    icon: Icons.title,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _descController,
-                    hint: 'Descrição (opcional)',
-                    icon: Icons.description,
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('Prioridade',
-                      style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  _buildPrioritySelector(),
-                  const SizedBox(height: 20),
-                  const Text('Grupo',
-                      style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  _buildGroupSelector(),
-                  const SizedBox(height: 20),
-                  const Text('Data e hora',
-                      style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  Row(
+            child: FutureBuilder<List<Group>>(
+              future: _groupsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFF6C63FF)));
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Erro ao carregar grupos do Firebase',
+                      style: TextStyle(color: Colors.redAccent.shade100),
+                    ),
+                  );
+                }
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _pickDate,
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F1733),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.calendar_today,
-                                    color: Colors.white38, size: 20),
-                                const SizedBox(width: 10),
-                                Text(_formatDate(_dueDate),
-                                    style:
-                                        const TextStyle(color: Colors.white)),
-                              ],
+                      _buildTextField(
+                        controller: _titleController,
+                        hint: 'Título da tarefa',
+                        icon: Icons.title,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _descController,
+                        hint: 'Descrição (opcional)',
+                        icon: Icons.description,
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 20),
+                      const Text('Prioridade', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      const SizedBox(height: 10),
+                      _buildPrioritySelector(),
+                      const SizedBox(height: 20),
+                      const Text('Grupo', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      const SizedBox(height: 10),
+                      _buildGroupSelector(), // Carrega os itens reativos gerados pelo _loadRealGroups
+                      const SizedBox(height: 20),
+                      const Text('Data e hora', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: _pickDate,
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F1733),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.calendar_today, color: Colors.white38, size: 20),
+                                    const SizedBox(width: 10),
+                                    Text(_formatDate(_dueDate), style: const TextStyle(color: Colors.white)),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _pickTime,
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F1733),
-                              borderRadius: BorderRadius.circular(20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: _pickTime,
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F1733),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.access_time, color: Colors.white38, size: 20),
+                                    const SizedBox(width: 10),
+                                    Text(_formatTime(_dueTime), style: const TextStyle(color: Colors.white)),
+                                  ],
+                                ),
+                              ),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.access_time,
-                                    color: Colors.white38, size: 20),
-                                const SizedBox(width: 10),
-                                Text(_formatTime(_dueTime),
-                                    style:
-                                        const TextStyle(color: Colors.white)),
-                              ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 30),
+                      
+                      // Botão de Envio
+                      SizedBox(
+                        width: double.infinity,
+                        child: InkWell(
+                          onTap: _isSaving ? null : _save,
+                          borderRadius: BorderRadius.circular(16),
+                          child: Ink(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: _isSaving
+                                    ? [const Color(0xFF555555), const Color(0xFF333333)]
+                                    : [const Color(0xFF8F7BFF), const Color(0xFF6C63FF)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Center(
+                              child: _isSaving
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      _isEditing ? 'Salvar alterações' : 'Criar tarefa',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    child: InkWell(
-                      onTap: _isSaving ? null : _save,
-                      borderRadius: BorderRadius.circular(16),
-                      child: Ink(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: _isSaving
-                                ? [
-                                    const Color(0xFF555555),
-                                    const Color(0xFF333333)
-                                  ]
-                                : [
-                                    const Color(0xFF8F7BFF),
-                                    const Color(0xFF6C63FF)
-                                  ],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Center(
-                          child: _isSaving
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  _isEditing
-                                      ? 'Salvar alterações'
-                                      : 'Criar tarefa',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],
