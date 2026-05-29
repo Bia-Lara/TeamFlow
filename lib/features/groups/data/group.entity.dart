@@ -1,11 +1,11 @@
-import '../../tasks/data/task.entity.dart';
+import '../../tasks/domain/task.dart';
 
 class Group {
   String? id;
   String? name;
   String? description;
   List<String>? memberIds;
-  List<TaskEntity>? tasks;
+  List<Task>? tasks;
 
   Group({
     this.id,
@@ -25,7 +25,7 @@ class Group {
           : null,
       tasks: json['tasks'] != null
           ? (json['tasks'] as List)
-              .map((taskJson) => TaskEntity.fromJson(taskJson as Map<String, dynamic>))
+              .map((taskJson) => Task.fromJson(taskJson as Map<String, dynamic>))
               .toList()
           : null,
     );
@@ -46,7 +46,7 @@ class Group {
     String? name,
     String? description,
     List<String>? memberIds,
-    List<TaskEntity>? tasks,
+    List<Task>? tasks,
   }) {
     return Group(
       id: id ?? this.id,

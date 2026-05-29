@@ -1,4 +1,4 @@
-import '../../tasks/data/task.entity.dart';
+import '../../tasks/domain/task.dart';
 
 class User {
   String? id;
@@ -6,7 +6,7 @@ class User {
   String? email;
   String? password;
   List<String>? groupIds;
-  List<TaskEntity>? tasks;
+  List<Task>? tasks;
 
   User({
     this.id,
@@ -28,7 +28,7 @@ class User {
           : null,
       tasks: json['tasks'] != null
           ? (json['tasks'] as List)
-              .map((taskJson) => TaskEntity.fromJson(taskJson as Map<String, dynamic>))
+              .map((taskJson) => Task.fromJson(taskJson as Map<String, dynamic>))
               .toList()
           : null,
     );
@@ -51,7 +51,7 @@ class User {
     String? email,
     String? password,
     List<String>? groupIds,
-    List<TaskEntity>? tasks,
+    List<Task>? tasks,
   }) {
     return User(
       id: id ?? this.id,
