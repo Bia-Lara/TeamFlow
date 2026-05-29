@@ -13,7 +13,11 @@ class TaskService {
   
   TaskService();
 
-  void createTask(Task task, String groupId, String userId) async {
+  void createTask(Task task, String? groupId, String? userId) async {
+    if (groupId == null) throw Exception('Grupo da tarefa não pode ser nulo');
+    if (userId == null) throw Exception('Grupo da tarefa não pode ser nulo');
+    if (task.id == null) throw Exception('ID da tarefa não pode ser nulo');
+
     Group group = await groupRepository.getById(groupId);
     User user = await userRepository.getById(userId);
 
@@ -26,5 +30,31 @@ class TaskService {
     groupTasks.add(task);
     final updatedGroup = group.copyWith(tasks: groupTasks);
     await groupRepository.update(updatedGroup);
+  }
+
+  Future<Task> updateTask(Task task, String userId) async {
+    final groupId = task.groupId;
+    if (groupId == null) throw Exception('Grupo da tarefa não pode ser nulo');
+
+    Group group = await groupRepository.getById(groupId);
+    User user = await userRepository.getById(userId);
+
+    List<Task> userTasks = List<Task>.from(user.tasks ?? []);
+    userTasks = userTasks.map((oldTask) {
+      return oldTask.id == task.id ? task : oldTask;
+    }).toList();
+    
+    final updatedUser = user.copyWith(tasks: userTasks);
+    await userRepository.update(updatedUser);
+
+    List<Task> groupTasks = List<Task>.from(group.tasks ?? []);
+    groupTasks = groupTasks.map((oldTask) {
+      return oldTask.id == task.id ? task : oldTask;
+    }).toList();
+    
+    final updatedGroup = group.copyWith(tasks: groupTasks);
+    await groupRepository.update(updatedGroup);
+
+    return task;
   }
 }
