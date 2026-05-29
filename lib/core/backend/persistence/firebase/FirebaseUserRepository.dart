@@ -33,6 +33,7 @@ class FirebaseUserRepository implements Persistency<User, String> {
       'name': user.name,
       'password': user.password,
       'groupIds': user.groupIds ?? [],
+      'tasks': [],  
     };
 
     await docRef.set(map);
@@ -43,13 +44,19 @@ class FirebaseUserRepository implements Persistency<User, String> {
   Future<User> update(User user) async {
     if (user.id == null) throw Exception('ID do usuário não pode ser nulo');
 
-    await _usersColl.doc(user.id).update({
-      'email': user.email,
-      'name': user.name,
-      'password': user.password,
-      'groupIds': user.groupIds ?? [],
-      'tasks': user.tasks?.map((e) => e.toJson()).toList() ?? []
-    });
+    final Map<String, dynamic> fields = {};
+
+    if (user.name != null) fields['name'] = user.name;
+    if (user.email != null) fields['email'] = user.email;
+    if (user.password != null) fields['password'] = user.password;
+    if (user.groupIds != null) fields['groupIds'] = user.groupIds;
+    if (user.tasks != null) {
+      fields['tasks'] = user.tasks!.map((e) => e.toJson()).toList();
+    }
+
+    if (fields.isEmpty) return user;
+
+    await _usersColl.doc(user.id).update(fields);
 
     return user;
   }

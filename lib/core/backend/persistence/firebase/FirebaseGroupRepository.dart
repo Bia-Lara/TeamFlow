@@ -28,6 +28,9 @@ class FirebaseGroupRepository implements Persistency<Group, String> {
       name: data['name'],
       description: data['description'],
       memberIds: List<String>.from(data['memberIds'] ?? []),
+      tasks: (data['tasks'] as List?)
+          ?.map((e) => Task.fromJson(e as Map<String, dynamic>))
+          .toList() ?? [],
     );
   }
 
@@ -50,12 +53,18 @@ class FirebaseGroupRepository implements Persistency<Group, String> {
   Future<Group> update(Group group) async {
     if (group.id == null) throw Exception('ID do grupo não pode ser nulo para atualização');
 
-    await _groupsColl.doc(group.id).update({
-      'name': group.name,
-      'description': group.description,
-      'memberIds': group.memberIds ?? [],
-      'tasks': group.tasks?.map((e) => e.toJson()).toList() ?? [],
-    });
+    final Map<String, dynamic> fields = {};
+
+    if (group.name != null) fields['name'] = group.name;
+    if (group.description != null) fields['description'] = group.description;
+    if (group.memberIds != null) fields['memberIds'] = group.memberIds;
+    if (group.tasks != null) {
+      fields['tasks'] = group.tasks!.map((e) => e.toJson()).toList();
+    }
+
+    if (fields.isEmpty) return group;
+
+    await _groupsColl.doc(group.id).update(fields);
 
     return group;
   }
